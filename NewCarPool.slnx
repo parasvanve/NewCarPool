@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="NewCarPool.Api/NewCarPool.Api.csproj" />
+  <Project Path="NewCarPool.Application/NewCarPool.Application.csproj" />
+  <Project Path="NewCarPool.Domain/NewCarPool.Domain.csproj" />
+  <Project Path="NewCarPool.Infrastructure/NewCarPool.Infrastructure.csproj" />
+</Solution>
