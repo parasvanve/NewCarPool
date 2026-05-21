@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import '../core/network/token_store.dart';
 import '../models/auth_models.dart';
+import '../models/profile_models.dart';
 import '../services/auth_service.dart';
 
 class AuthProvider extends ChangeNotifier {
@@ -11,6 +12,7 @@ class AuthProvider extends ChangeNotifier {
   AuthSession? session;
   bool isLoading = false;
   String? lastResetToken;
+  bool isBootstrapping = false;
 
   bool get isAuthenticated => session != null;
 
@@ -48,6 +50,42 @@ class AuthProvider extends ChangeNotifier {
   Future<void> logout() async {
     session = null;
     await _tokenStore.clear();
+    notifyListeners();
+  }
+
+  Future<bool> restoreSessionFromStorage() async {
+    isBootstrapping = true;
+    notifyListeners();
+    try {
+      final accessToken = await _tokenStore.accessToken;
+      final refreshToken = await _tokenStore.refreshToken;
+      if (accessToken == null || refreshToken == null) {
+        return false;
+      }
+      session ??= AuthSession(
+        userId: '',
+        fullName: '',
+        email: '',
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      );
+      return true;
+    } finally {
+      isBootstrapping = false;
+      notifyListeners();
+    }
+  }
+
+  void syncFromProfile(UserProfile profile) {
+    final current = session;
+    if (current == null) return;
+    session = AuthSession(
+      userId: profile.id,
+      fullName: profile.fullName,
+      email: profile.email,
+      accessToken: current.accessToken,
+      refreshToken: current.refreshToken,
+    );
     notifyListeners();
   }
 

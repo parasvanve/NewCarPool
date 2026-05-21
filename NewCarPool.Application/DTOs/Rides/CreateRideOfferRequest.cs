@@ -7,5 +7,6 @@ public sealed record CreateRideOfferRequest(
     DateTime DepartureTimeUtc,
     int AvailableSeats,
     decimal PricePerSeat,
+    IReadOnlyList<RideStopDto>? IntermediateStops,
     string? VehicleName,
     string? VehicleNumber);

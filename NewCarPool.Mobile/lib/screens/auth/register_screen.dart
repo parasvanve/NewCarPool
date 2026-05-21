@@ -7,6 +7,7 @@ import '../../core/errors/app_exception.dart';
 import '../../core/widgets/app_snack_bar.dart';
 import '../../core/widgets/loading_button.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/profile_provider.dart';
 import 'auth_shell.dart';
 import 'auth_validators.dart';
 
@@ -41,6 +42,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
       title: 'Create account',
       subtitle: 'Join as a passenger today and offer rides whenever you want.',
       children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: const [
+            Chip(label: Text('Driver + Passenger'), avatar: Icon(Icons.swap_horiz, size: 16)),
+            Chip(label: Text('Quick Onboarding'), avatar: Icon(Icons.bolt, size: 16)),
+          ],
+        ),
+        const SizedBox(height: 14),
         Form(
           key: _formKey,
           child: Column(
@@ -113,7 +123,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
             _phone.text.trim(),
             _password.text,
           );
+      await context.read<ProfileProvider>().loadProfile();
+      final profile = context.read<ProfileProvider>().profile;
+      if (profile != null && context.mounted) {
+        context.read<AuthProvider>().syncFromProfile(profile);
+      }
       if (context.mounted) {
+        AppSnackBar.showSuccess(context, 'Account created successfully.');
         context.go(AppRoutes.dashboard);
       }
     } on DioException catch (exception) {

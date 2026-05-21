@@ -3,7 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/constants/app_routes.dart';
-import '../../core/network/token_store.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/profile_provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -25,12 +26,27 @@ class _SplashScreenState extends State<SplashScreen> {
       return;
     }
 
-    final token = await context.read<TokenStore>().accessToken;
-    if (!mounted) {
+    final authProvider = context.read<AuthProvider>();
+    final hasStoredSession = await authProvider.restoreSessionFromStorage();
+    if (!mounted) return;
+    if (!hasStoredSession) {
+      context.go(AppRoutes.login);
       return;
     }
 
-    context.go(token == null ? AppRoutes.login : AppRoutes.dashboard);
+    try {
+      await context.read<ProfileProvider>().loadProfile();
+      final profile = context.read<ProfileProvider>().profile;
+      if (profile != null) {
+        authProvider.syncFromProfile(profile);
+      }
+      if (!mounted) return;
+      context.go(AppRoutes.dashboard);
+    } catch (_) {
+      await authProvider.logout();
+      if (!mounted) return;
+      context.go(AppRoutes.login);
+    }
   }
 
   @override

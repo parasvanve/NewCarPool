@@ -8,9 +8,11 @@ public sealed class RideOffer
     public Guid DriverId { get; set; }
     public Guid VehicleId { get; set; }
     public string OriginName { get; set; } = string.Empty;
+    public string OriginAddress { get; set; } = string.Empty;
     public double OriginLatitude { get; set; }
     public double OriginLongitude { get; set; }
     public string DestinationName { get; set; } = string.Empty;
+    public string DestinationAddress { get; set; } = string.Empty;
     public double DestinationLatitude { get; set; }
     public double DestinationLongitude { get; set; }
     public DateTime DepartureTimeUtc { get; set; }
@@ -29,4 +31,6 @@ public sealed class RideOffer
     public Vehicle Vehicle { get; set; } = default!;
     public ICollection<RideBooking> Bookings { get; set; } = new List<RideBooking>();
     public ICollection<RideLocationUpdate> LocationUpdates { get; set; } = new List<RideLocationUpdate>();
+    public ICollection<RideStop> IntermediateStops { get; set; } = new List<RideStop>();
+    public RideChatGroup? ChatGroup { get; set; }
 }

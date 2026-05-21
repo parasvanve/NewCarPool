@@ -43,6 +43,21 @@ public sealed class RidesController : ControllerBase
     public async Task<ActionResult<RideBookingDto>> Book(BookRideRequest request, CancellationToken cancellationToken) =>
         Ok(await _rideService.BookRideAsync(User.GetUserId(), request, cancellationToken));
 
+    [HttpGet("{rideOfferId:guid}/participants")]
+    public async Task<ActionResult<IReadOnlyList<RideBookingDto>>> Participants(Guid rideOfferId, CancellationToken cancellationToken) =>
+        Ok(await _rideService.ParticipantsAsync(rideOfferId, cancellationToken));
+
+    [HttpGet("{rideOfferId:guid}/chat/messages")]
+    public async Task<ActionResult<IReadOnlyList<RideChatMessageDto>>> Chat(Guid rideOfferId, CancellationToken cancellationToken) =>
+        Ok(await _rideService.RideChatAsync(User.GetUserId(), rideOfferId, cancellationToken));
+
+    [HttpPost("{rideOfferId:guid}/chat/messages")]
+    public async Task<ActionResult<RideChatMessageDto>> SendChat(
+        Guid rideOfferId,
+        SendRideChatMessageRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(await _rideService.SendRideChatMessageAsync(User.GetUserId(), rideOfferId, request, cancellationToken));
+
     [HttpPost("{rideOfferId:guid}/start")]
     public async Task<ActionResult<RideOfferDto>> Start(Guid rideOfferId, CancellationToken cancellationToken) =>
         Ok(await _rideService.StartRideAsync(User.GetUserId(), rideOfferId, cancellationToken));

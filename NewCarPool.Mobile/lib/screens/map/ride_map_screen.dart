@@ -21,13 +21,20 @@ class RideMapScreen extends StatelessWidget {
           ),
           PolylineLayer(
             polylines: [
-              Polyline(points: points, strokeWidth: 4, color: Theme.of(context).colorScheme.primary),
+              Polyline(
+                  points: points,
+                  strokeWidth: 4,
+                  color: Theme.of(context).colorScheme.primary),
             ],
           ),
           MarkerLayer(
             markers: [
-              Marker(point: ride.origin.latLng, child: const Icon(Icons.trip_origin, color: Colors.green)),
-              Marker(point: ride.destination.latLng, child: const Icon(Icons.location_on, color: Colors.red)),
+              Marker(
+                  point: ride.origin.latLng,
+                  child: const Icon(Icons.trip_origin, color: Colors.green)),
+              Marker(
+                  point: ride.destination.latLng,
+                  child: const Icon(Icons.location_on, color: Colors.red)),
             ],
           ),
         ],

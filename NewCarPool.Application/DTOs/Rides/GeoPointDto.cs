@@ -1,3 +1,7 @@
 namespace NewCarPool.Application.DTOs.Rides;
 
-public sealed record GeoPointDto(string Name, double Latitude, double Longitude);
+public sealed record GeoPointDto(
+    string Name,
+    double Latitude,
+    double Longitude,
+    string? Address = null);

@@ -53,11 +53,14 @@ public sealed class AdminService : IAdminService
     }
 
     public async Task<IReadOnlyList<RideOfferDto>> GetRidesAsync(CancellationToken cancellationToken) =>
-        await _rides.Query().Include(x => x.Driver).OrderByDescending(x => x.CreatedAtUtc).Select(x => new RideOfferDto(
+        await _rides.Query().Include(x => x.Driver).Include(x => x.IntermediateStops).OrderByDescending(x => x.CreatedAtUtc).Select(x => new RideOfferDto(
             x.Id, x.DriverId, x.VehicleId, x.Driver.FullName,
-            new GeoPointDto(x.OriginName, x.OriginLatitude, x.OriginLongitude),
-            new GeoPointDto(x.DestinationName, x.DestinationLatitude, x.DestinationLongitude),
-            x.DepartureTimeUtc, x.AvailableSeats, x.PricePerSeat, x.VehicleName, x.VehicleNumber, x.RoutePolyline, x.DistanceKm, x.EtaMinutes, x.Status)).ToListAsync(cancellationToken);
+            new GeoPointDto(x.OriginName, x.OriginLatitude, x.OriginLongitude, x.OriginAddress),
+            new GeoPointDto(x.DestinationName, x.DestinationLatitude, x.DestinationLongitude, x.DestinationAddress),
+            x.IntermediateStops.OrderBy(s => s.StopOrder)
+                .Select(s => new RideStopDto(s.Name, s.Address, s.Latitude, s.Longitude, s.StopOrder))
+                .ToList(),
+            x.DepartureTimeUtc, x.AvailableSeats, x.Bookings.Count(b => b.Status == BookingStatus.Confirmed), x.PricePerSeat, x.VehicleName, x.VehicleNumber, x.RoutePolyline, x.DistanceKm, x.EtaMinutes, x.Status)).ToListAsync(cancellationToken);
 
     public async Task<DashboardStatsDto> GetStatsAsync(CancellationToken cancellationToken) =>
         new(

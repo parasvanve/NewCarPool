@@ -6,4 +6,5 @@ public interface IMapService
 {
     Task<RouteResultDto> CalculateRouteAsync(RouteRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyList<GeocodeResultDto>> SearchPlacesAsync(string query, CancellationToken cancellationToken);
+    Task<ReverseGeocodeResultDto> ReverseGeocodeAsync(double latitude, double longitude, CancellationToken cancellationToken);
 }

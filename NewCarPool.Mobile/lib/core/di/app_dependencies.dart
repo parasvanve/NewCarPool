@@ -19,7 +19,7 @@ class AppDependencies {
     vehicleService = VehicleService(apiClient);
     bookingService = BookingService(apiClient);
     paymentService = PaymentService(apiClient);
-    notificationService = NotificationService(apiClient);
+    notificationService = NotificationService(apiClient, tokenStore);
     profileService = ProfileService(apiClient);
     mapService = MapService(apiClient);
     trackingService = TrackingService(apiClient, tokenStore);

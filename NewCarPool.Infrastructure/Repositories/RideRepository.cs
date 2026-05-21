@@ -20,6 +20,7 @@ public sealed class RideRepository : IRideRepository
     public Task<RideOffer?> GetRideByIdAsync(Guid id, CancellationToken cancellationToken) =>
         _dbContext.RideOffers
             .Include(x => x.Driver)
+            .Include(x => x.IntermediateStops)
             .Include(x => x.Bookings)
             .ThenInclude(x => x.Passenger)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
@@ -34,6 +35,8 @@ public sealed class RideRepository : IRideRepository
         var query = _dbContext.RideOffers
             .AsNoTracking()
             .Include(x => x.Driver)
+            .Include(x => x.Bookings)
+            .Include(x => x.IntermediateStops)
             .Where(x => x.Status == RideStatus.Open && x.AvailableSeats >= request.Seats)
             .Where(x => Math.Abs(x.OriginLatitude - request.OriginLatitude) <= originWindow)
             .Where(x => Math.Abs(x.OriginLongitude - request.OriginLongitude) <= originWindow)

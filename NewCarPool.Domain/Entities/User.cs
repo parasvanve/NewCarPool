@@ -19,4 +19,5 @@ public sealed class User
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
     public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
+    public ICollection<RideChatMessage> RideChatMessages { get; set; } = new List<RideChatMessage>();
 }

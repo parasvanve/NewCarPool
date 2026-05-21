@@ -1,9 +1,11 @@
 using Microsoft.OpenApi.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using NewCarPool.Application.Common;
 using NewCarPool.Api.Hubs;
 using NewCarPool.Api.Middleware;
 using NewCarPool.Infrastructure;
+using NewCarPool.Infrastructure.Data;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -75,6 +77,12 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<NewCarPoolDbContext>();
+    db.Database.Migrate();
+}
 
 if (app.Environment.IsDevelopment())
 {

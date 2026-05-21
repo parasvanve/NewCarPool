@@ -7,6 +7,7 @@ import '../../core/errors/app_exception.dart';
 import '../../core/widgets/app_snack_bar.dart';
 import '../../core/widgets/loading_button.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/profile_provider.dart';
 import 'auth_shell.dart';
 import 'auth_validators.dart';
 
@@ -37,6 +38,15 @@ class _LoginScreenState extends State<LoginScreen> {
       title: 'Welcome back',
       subtitle: 'Sign in to book rides, offer seats, and track trips in realtime.',
       children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: const [
+            Chip(label: Text('Secure Login'), avatar: Icon(Icons.verified_user, size: 16)),
+            Chip(label: Text('Realtime Trips'), avatar: Icon(Icons.route, size: 16)),
+          ],
+        ),
+        const SizedBox(height: 14),
         Form(
           key: _formKey,
           child: Column(
@@ -97,7 +107,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
     try {
       await context.read<AuthProvider>().login(_email.text.trim(), _password.text);
+      await context.read<ProfileProvider>().loadProfile();
+      final profile = context.read<ProfileProvider>().profile;
+      if (profile != null && context.mounted) {
+        context.read<AuthProvider>().syncFromProfile(profile);
+      }
       if (context.mounted) {
+        AppSnackBar.showSuccess(context, 'Welcome back!');
         context.go(AppRoutes.dashboard);
       }
     } on DioException catch (exception) {

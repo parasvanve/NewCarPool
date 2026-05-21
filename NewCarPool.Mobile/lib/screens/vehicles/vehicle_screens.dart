@@ -1,9 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/errors/app_exception.dart';
-import '../../core/widgets/app_empty_state.dart';
-import '../../core/widgets/app_error_view.dart';
+import '../../core/widgets/app_design_system.dart';
 import '../../core/widgets/app_snack_bar.dart';
 import '../../core/widgets/loading_button.dart';
 import '../../models/vehicle_models.dart';
@@ -27,9 +27,7 @@ class _MyVehiclesScreenState extends State<MyVehiclesScreen> {
     try {
       await context.read<VehicleProvider>().loadMine();
     } catch (_) {
-      if (mounted) {
-        AppSnackBar.showError(context, 'Could not load vehicles.');
-      }
+      if (mounted) AppSnackBar.showError(context, 'Could not load vehicles.');
     }
   }
 
@@ -37,51 +35,49 @@ class _MyVehiclesScreenState extends State<MyVehiclesScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<VehicleProvider>();
     return Scaffold(
+      backgroundColor: AppDesignTokens.pageBg,
       appBar: AppBar(title: const Text('My Vehicles')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openForm(context),
         icon: const Icon(Icons.add),
-        label: const Text('Add'),
+        label: const Text('Add Vehicle'),
       ),
-      body: RefreshIndicator(
-        onRefresh: _load,
-        child: Builder(
-          builder: (_) {
-            if (provider.isLoading && provider.vehicles.isEmpty) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            if (provider.errorMessage != null && provider.vehicles.isEmpty) {
-              return AppErrorView(message: 'Could not load vehicles.', onRetry: _load);
-            }
-
-            if (provider.vehicles.isEmpty) {
-              return AppEmptyState(
-                icon: Icons.garage_outlined,
-                title: 'No vehicles added',
-                message: 'Add your car or bike before offering a ride.',
-                action: FilledButton.icon(
-                  onPressed: () => _openForm(context),
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add vehicle'),
-                ),
-              );
-            }
-
-            return ListView.separated(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-              itemCount: provider.vehicles.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (_, index) {
-                final vehicle = provider.vehicles[index];
-                return _VehicleCard(
-                  vehicle: vehicle,
-                  onEdit: () => _openForm(context, vehicle: vehicle),
-                  onDelete: () => _confirmDelete(context, vehicle),
-                );
-              },
-            );
-          },
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: RefreshIndicator(
+            onRefresh: _load,
+            child: provider.isLoading && provider.vehicles.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : provider.vehicles.isEmpty
+                    ? ListView(
+                        padding: const EdgeInsets.all(12),
+                        children: [
+                          const AppGradientHeroCard(
+                            title: 'Vehicle Garage',
+                            subtitle: 'Add your vehicle to start offering rides',
+                            icon: Icons.garage_outlined,
+                          ),
+                          const SizedBox(height: 120),
+                          Icon(Icons.garage_outlined, size: 54, color: Colors.grey.shade400),
+                          const SizedBox(height: 8),
+                          const Center(child: Text('No vehicles added yet.')),
+                        ],
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+                        itemCount: provider.vehicles.length,
+                        itemBuilder: (context, index) {
+                          final v = provider.vehicles[index];
+                          return _VehicleCard(
+                            vehicle: v,
+                            onEdit: () => _openForm(context, vehicle: v),
+                            onDelete: () => _confirmDelete(context, v),
+                          );
+                        },
+                      ),
+          ),
         ),
       ),
     );
@@ -104,25 +100,22 @@ class _MyVehiclesScreenState extends State<MyVehiclesScreen> {
       ),
     );
 
-    if (confirmed != true || !context.mounted) {
-      return;
-    }
-
+    if (confirmed != true || !context.mounted) return;
     try {
       await context.read<VehicleProvider>().delete(vehicle.id);
-      if (context.mounted) {
-        AppSnackBar.showSuccess(context, 'Vehicle deleted.');
-      }
+      if (context.mounted) AppSnackBar.showSuccess(context, 'Vehicle deleted.');
     } catch (_) {
-      if (context.mounted) {
-        AppSnackBar.showError(context, 'Could not delete vehicle.');
-      }
+      if (context.mounted) AppSnackBar.showError(context, 'Could not delete vehicle.');
     }
   }
 }
 
 class _VehicleCard extends StatelessWidget {
-  const _VehicleCard({required this.vehicle, required this.onEdit, required this.onDelete});
+  const _VehicleCard({
+    required this.vehicle,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   final Vehicle vehicle;
   final VoidCallback onEdit;
@@ -130,47 +123,26 @@ class _VehicleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final icon = vehicle.vehicleType == VehicleType.bike ? Icons.two_wheeler : Icons.directions_car;
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  child: Icon(vehicle.vehicleType == VehicleType.bike ? Icons.two_wheeler : Icons.directions_car),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(vehicle.vehicleName, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                      Text('${vehicle.vehicleNumber} | ${vehicle.vehicleType.label} | ${vehicle.color}'),
-                    ],
-                  ),
-                ),
-                PopupMenuButton<String>(
-                  onSelected: (value) => value == 'edit' ? onEdit() : onDelete(),
-                  itemBuilder: (_) => const [
-                    PopupMenuItem(value: 'edit', child: Text('Edit')),
-                    PopupMenuItem(value: 'delete', child: Text('Delete')),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                Chip(label: Text('${vehicle.seats} seats')),
-                Chip(label: Text(vehicle.isVerified ? 'Verified' : 'Pending verification')),
-                if (vehicle.rcImagePath?.isNotEmpty == true) const Chip(label: Text('RC uploaded')),
-                if (vehicle.vehicleImagePath?.isNotEmpty == true) const Chip(label: Text('Vehicle image uploaded')),
-              ],
-            ),
+      margin: const EdgeInsets.only(bottom: 10),
+      child: ListTile(
+        leading: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFF1FF),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: AppDesignTokens.brandStart),
+        ),
+        title: Text(vehicle.vehicleName, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text('${vehicle.vehicleNumber} • ${vehicle.color} • ${vehicle.seats} seats'),
+        trailing: PopupMenuButton<String>(
+          onSelected: (value) => value == 'edit' ? onEdit() : onDelete(),
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'edit', child: Text('Edit')),
+            PopupMenuItem(value: 'delete', child: Text('Delete')),
           ],
         ),
       ),
@@ -201,14 +173,14 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
   @override
   void initState() {
     super.initState();
-    final vehicle = widget.vehicle;
-    _name = TextEditingController(text: vehicle?.vehicleName ?? '');
-    _number = TextEditingController(text: vehicle?.vehicleNumber ?? '');
-    _color = TextEditingController(text: vehicle?.color ?? '');
-    _rcImage = TextEditingController(text: vehicle?.rcImagePath ?? '');
-    _vehicleImage = TextEditingController(text: vehicle?.vehicleImagePath ?? '');
-    _type = vehicle?.vehicleType ?? VehicleType.sedan;
-    _seats = vehicle?.seats ?? 4;
+    final v = widget.vehicle;
+    _name = TextEditingController(text: v?.vehicleName ?? '');
+    _number = TextEditingController(text: v?.vehicleNumber ?? '');
+    _color = TextEditingController(text: v?.color ?? '');
+    _rcImage = TextEditingController(text: v?.rcImagePath ?? '');
+    _vehicleImage = TextEditingController(text: v?.vehicleImagePath ?? '');
+    _type = v?.vehicleType ?? VehicleType.sedan;
+    _seats = v?.seats ?? 4;
   }
 
   @override
@@ -225,73 +197,79 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
   Widget build(BuildContext context) {
     final isEdit = widget.vehicle != null;
     return Scaffold(
+      backgroundColor: AppDesignTokens.pageBg,
       appBar: AppBar(title: Text(isEdit ? 'Edit Vehicle' : 'Add Vehicle')),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            TextFormField(
-              controller: _name,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'Vehicle name', prefixIcon: Icon(Icons.directions_car)),
-              validator: (value) => _required(value, 'Vehicle name'),
+      body: Align(
+        alignment: Alignment.topCenter,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                TextFormField(
+                  controller: _name,
+                  decoration: const InputDecoration(labelText: 'Vehicle Name', prefixIcon: Icon(Icons.directions_car)),
+                  validator: (v) => _required(v, 'Vehicle name'),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _number,
+                  decoration: const InputDecoration(labelText: 'Vehicle Number', prefixIcon: Icon(Icons.confirmation_number_outlined)),
+                  validator: (v) => _required(v, 'Vehicle number'),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<VehicleType>(
+                  initialValue: _type,
+                  decoration: const InputDecoration(labelText: 'Vehicle Type', prefixIcon: Icon(Icons.category_outlined)),
+                  items: VehicleType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.label))).toList(),
+                  onChanged: (v) => setState(() => _type = v ?? VehicleType.sedan),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _color,
+                  decoration: const InputDecoration(labelText: 'Color', prefixIcon: Icon(Icons.palette_outlined)),
+                  validator: (v) => _required(v, 'Color'),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    const Icon(Icons.event_seat),
+                    const SizedBox(width: 8),
+                    Text('Seats: $_seats'),
+                    const Spacer(),
+                    IconButton(onPressed: _seats > 1 ? () => setState(() => _seats--) : null, icon: const Icon(Icons.remove_circle_outline)),
+                    IconButton(onPressed: _seats < 8 ? () => setState(() => _seats++) : null, icon: const Icon(Icons.add_circle_outline)),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _rcImage,
+                  decoration: const InputDecoration(labelText: 'RC Image URL/Path', prefixIcon: Icon(Icons.image_outlined)),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _vehicleImage,
+                  decoration: const InputDecoration(labelText: 'Vehicle Image URL/Path', prefixIcon: Icon(Icons.photo_camera_outlined)),
+                ),
+                const SizedBox(height: 18),
+                LoadingButton(
+                  isLoading: _isSaving,
+                  label: isEdit ? 'Update Vehicle' : 'Save Vehicle',
+                  icon: Icons.save_outlined,
+                  onPressed: _save,
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _number,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'Vehicle number', prefixIcon: Icon(Icons.confirmation_number_outlined)),
-              validator: (value) => _required(value, 'Vehicle number'),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<VehicleType>(
-              initialValue: _type,
-              decoration: const InputDecoration(labelText: 'Vehicle type', prefixIcon: Icon(Icons.category_outlined)),
-              items: VehicleType.values.map((type) => DropdownMenuItem(value: type, child: Text(type.label))).toList(),
-              onChanged: (value) => setState(() => _type = value ?? VehicleType.sedan),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _color,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'Color', prefixIcon: Icon(Icons.palette_outlined)),
-              validator: (value) => _required(value, 'Color'),
-            ),
-            const SizedBox(height: 16),
-            _SeatStepper(
-              seats: _seats,
-              onChanged: (value) => setState(() => _seats = value),
-            ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _rcImage,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(labelText: 'RC image URL or path', prefixIcon: Icon(Icons.image_outlined)),
-            ),
-            const SizedBox(height: 12),
-            TextFormField(
-              controller: _vehicleImage,
-              decoration: const InputDecoration(labelText: 'Vehicle image URL or path', prefixIcon: Icon(Icons.photo_camera_outlined)),
-            ),
-            const SizedBox(height: 20),
-            LoadingButton(
-              isLoading: _isSaving,
-              label: isEdit ? 'Update vehicle' : 'Save vehicle',
-              icon: Icons.save_outlined,
-              onPressed: _save,
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
+    if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
     final input = UpsertVehicleInput(
       vehicleName: _name.text.trim(),
@@ -302,7 +280,6 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
       rcImagePath: _rcImage.text.trim().isEmpty ? null : _rcImage.text.trim(),
       vehicleImagePath: _vehicleImage.text.trim().isEmpty ? null : _vehicleImage.text.trim(),
     );
-
     try {
       final provider = context.read<VehicleProvider>();
       if (widget.vehicle == null) {
@@ -310,61 +287,22 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
       } else {
         await provider.update(widget.vehicle!.id, input);
       }
-
       if (mounted) {
         AppSnackBar.showSuccess(context, widget.vehicle == null ? 'Vehicle added.' : 'Vehicle updated.');
         Navigator.pop(context);
       }
-    } on DioException catch (exception) {
-      final error = exception.error;
+    } on DioException catch (e) {
+      final error = e.error;
       if (mounted) {
         AppSnackBar.showError(context, error is AppException ? error.message : 'Could not save vehicle.');
       }
     } finally {
-      if (mounted) {
-        setState(() => _isSaving = false);
-      }
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
-  String? _required(String? value, String label) {
-    if (value == null || value.trim().isEmpty) {
-      return '$label is required';
-    }
+  String? _required(String? value, String field) {
+    if (value == null || value.trim().isEmpty) return '$field is required';
     return null;
-  }
-}
-
-class _SeatStepper extends StatelessWidget {
-  const _SeatStepper({required this.seats, required this.onChanged});
-
-  final int seats;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        border: Border.all(color: Theme.of(context).colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.event_seat_outlined),
-          const SizedBox(width: 12),
-          const Expanded(child: Text('Seats')),
-          IconButton(
-            onPressed: seats > 1 ? () => onChanged(seats - 1) : null,
-            icon: const Icon(Icons.remove_circle_outline),
-          ),
-          SizedBox(width: 32, child: Center(child: Text('$seats'))),
-          IconButton(
-            onPressed: seats < 8 ? () => onChanged(seats + 1) : null,
-            icon: const Icon(Icons.add_circle_outline),
-          ),
-        ],
-      ),
-    );
   }
 }
