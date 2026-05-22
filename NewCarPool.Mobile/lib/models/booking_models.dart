@@ -1,19 +1,23 @@
 enum BookingStatus {
-  pending(0, 'Pending'),
-  accepted(1, 'Accepted'),
-  rejected(2, 'Rejected'),
+  pending(1, 'Pending'),
+  accepted(2, 'Booked'),
+  rejected(4, 'Rejected'),
   cancelled(3, 'Cancelled'),
-  completed(4, 'Completed');
+  completed(5, 'Completed');
 
   const BookingStatus(this.code, this.label);
   final int code;
   final String label;
 
   static BookingStatus fromCode(int code) {
-    return BookingStatus.values.firstWhere(
-      (status) => status.code == code,
-      orElse: () => BookingStatus.pending,
-    );
+    return switch (code) {
+      2 => BookingStatus.accepted, // backend Confirmed
+      3 => BookingStatus.cancelled,
+      4 => BookingStatus.rejected,
+      5 => BookingStatus.completed,
+      1 || 0 => BookingStatus.pending, // include legacy 0 mapping
+      _ => BookingStatus.pending,
+    };
   }
 }
 

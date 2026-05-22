@@ -23,18 +23,21 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<BookingProvider>();
+    final booked = provider.bookings
+        .where((b) => b.bookingStatus == BookingStatus.accepted)
+        .toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Incoming Bookings')),
-      body: provider.isLoading && provider.bookings.isEmpty
+      appBar: AppBar(title: const Text('Booked Passengers')),
+      body: provider.isLoading && booked.isEmpty
           ? const Center(child: CircularProgressIndicator())
-          : provider.bookings.isEmpty
+          : booked.isEmpty
               ? RefreshIndicator(
                   onRefresh: () => context.read<BookingProvider>().loadHistory(),
                   child: ListView(
                     children: const [
                       SizedBox(height: 140),
-                      Center(child: Text('No booking requests found.')),
+                      Center(child: Text('No booked passengers found.')),
                     ],
                   ),
                 )
@@ -42,10 +45,9 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
                   onRefresh: () => context.read<BookingProvider>().loadHistory(),
                   child: ListView.builder(
                     padding: const EdgeInsets.all(16),
-                    itemCount: provider.bookings.length,
+                    itemCount: booked.length,
                     itemBuilder: (context, index) {
-                      final booking = provider.bookings[index];
-                      final processing = provider.processingIds.contains(booking.id);
+                      final booking = booked[index];
                       return Card(
                         margin: const EdgeInsets.only(bottom: 14),
                         child: Padding(
@@ -68,7 +70,7 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
                                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                         ),
                                         Text(
-                                          'Requested: ${booking.seatsBooked} seat(s) | Status: ${booking.bookingStatus.label}',
+                                          'Booked: ${booking.seatsBooked} seat(s) | Status: ${booking.bookingStatus.label}',
                                           style: const TextStyle(color: Colors.grey, fontSize: 13),
                                         ),
                                       ],
@@ -76,59 +78,11 @@ class _DriverRequestsScreenState extends State<DriverRequestsScreen> {
                                   ),
                                 ],
                               ),
-                              const Divider(height: 24),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  if (booking.bookingStatus == BookingStatus.pending) ...[
-                                    OutlinedButton(
-                                      onPressed: processing
-                                          ? null
-                                          : () async {
-                                              final bookingProvider = context.read<BookingProvider>();
-                                              final messenger = ScaffoldMessenger.of(context);
-                                              try {
-                                                await bookingProvider.reject(booking.id);
-                                                if (!mounted) return;
-                                                messenger.showSnackBar(
-                                                  const SnackBar(content: Text('Booking rejected.')),
-                                                );
-                                              } catch (error) {
-                                                if (!mounted) return;
-                                                messenger.showSnackBar(
-                                                  SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
-                                                );
-                                              }
-                                            },
-                                      style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                                      child: const Text('Reject'),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    FilledButton(
-                                      onPressed: processing
-                                          ? null
-                                          : () async {
-                                              final bookingProvider = context.read<BookingProvider>();
-                                              final messenger = ScaffoldMessenger.of(context);
-                                              try {
-                                                await bookingProvider.accept(booking.id);
-                                                if (!mounted) return;
-                                                messenger.showSnackBar(
-                                                  const SnackBar(content: Text('Booking accepted.')),
-                                                );
-                                              } catch (error) {
-                                                if (!mounted) return;
-                                                messenger.showSnackBar(
-                                                  SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
-                                                );
-                                              }
-                                            },
-                                      child: Text(processing ? 'Please wait...' : 'Accept'),
-                                    ),
-                                  ] else
-                                    Chip(label: Text(booking.bookingStatus.label)),
-                                ],
-                              )
+                              const SizedBox(height: 12),
+                              Align(
+                                alignment: Alignment.centerRight,
+                                child: Chip(label: Text(booking.bookingStatus.label)),
+                              ),
                             ],
                           ),
                         ),

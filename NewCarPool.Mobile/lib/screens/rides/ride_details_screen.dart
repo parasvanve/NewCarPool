@@ -311,10 +311,13 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
               BookingStatus.completed => Colors.teal,
               _ => Colors.orange,
             };
+            final bookingLabel = latest.bookingStatus == BookingStatus.accepted
+                ? 'Booked'
+                : latest.bookingStatus.label;
             return Card(
               child: ListTile(
                 leading: Icon(Icons.verified, color: color),
-                title: Text('Your booking: ${latest.bookingStatus.label}'),
+                title: Text('Your booking: $bookingLabel'),
                 subtitle: Text('${latest.seatsBooked} seat(s) requested'),
               ),
             );
