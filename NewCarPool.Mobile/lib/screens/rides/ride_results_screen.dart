@@ -226,6 +226,18 @@ class _RideCard extends StatelessWidget {
                   child: Wrap(spacing: 6, runSpacing: 6, children: ride.intermediateStops.take(3).map((s) => Chip(label: Text(s.name))).toList()),
                 ),
               ],
+              if ((ride.notes ?? '').trim().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    ride.notes!.trim(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               Row(
                 children: [

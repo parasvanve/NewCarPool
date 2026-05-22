@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using System.Data;
 using NewCarPool.Domain.Entities;
 using NewCarPool.Domain.Enums;
+using Microsoft.Extensions.Logging;
+using Microsoft.Data.SqlClient;
 
 namespace NewCarPool.Infrastructure.Services;
 
@@ -19,6 +21,7 @@ public sealed class RideService : IRideService
     private readonly IGenericRepository<RideChatMessage> _chatMessages;
     private readonly IUnitOfWork _unitOfWork;
     private readonly Data.NewCarPoolDbContext _dbContext;
+    private readonly ILogger<RideService> _logger;
 
     public RideService(
         IRideRepository rides,
@@ -28,6 +31,7 @@ public sealed class RideService : IRideService
         IGenericRepository<RideChatGroup> chatGroups,
         IGenericRepository<RideChatMessage> chatMessages,
         Data.NewCarPoolDbContext dbContext,
+        ILogger<RideService> logger,
         IUnitOfWork unitOfWork)
     {
         _rides = rides;
@@ -37,52 +41,83 @@ public sealed class RideService : IRideService
         _chatGroups = chatGroups;
         _chatMessages = chatMessages;
         _dbContext = dbContext;
+        _logger = logger;
         _unitOfWork = unitOfWork;
     }
 
     public async Task<RideOfferDto> OfferRideAsync(Guid driverId, CreateRideOfferRequest request, CancellationToken cancellationToken)
     {
-        _ = await _users.GetByIdAsync(driverId, cancellationToken) ?? throw new ApiException("Driver not found.", 404);
-        ValidateRideOffer(request);
-        await EnsureVehicleOwnershipAsync(driverId, request.VehicleId, cancellationToken);
-
-        var ride = new RideOffer
+        try
         {
-            Id = Guid.NewGuid(),
-            DriverId = driverId,
-            VehicleId = request.VehicleId,
-            OriginName = Truncate(request.Origin.Name, 300),
-            OriginAddress = Truncate(request.Origin.Address ?? request.Origin.Name, 500),
-            OriginLatitude = request.Origin.Latitude,
-            OriginLongitude = request.Origin.Longitude,
-            DestinationName = Truncate(request.Destination.Name, 300),
-            DestinationAddress = Truncate(request.Destination.Address ?? request.Destination.Name, 500),
-            DestinationLatitude = request.Destination.Latitude,
-            DestinationLongitude = request.Destination.Longitude,
-            DepartureTimeUtc = request.DepartureTimeUtc,
-            AvailableSeats = request.AvailableSeats,
-            PricePerSeat = request.PricePerSeat,
-            VehicleName = request.VehicleName,
-            VehicleNumber = request.VehicleNumber,
-            IntermediateStops = (request.IntermediateStops ?? [])
-                .OrderBy(x => x.Order)
-                .Select(x => new RideStop
-                {
-                    Id = Guid.NewGuid(),
-                    Name = Truncate(x.Name, 200),
-                    Address = Truncate(x.Address ?? x.Name, 500),
-                    Latitude = x.Latitude,
-                    Longitude = x.Longitude,
-                    StopOrder = x.Order
-                })
-                .ToList()
-        };
+            _logger.LogInformation(
+                "Offer ride request received. DriverId={DriverId}, VehicleId={VehicleId}, Seats={Seats}, DepartureUtc={DepartureUtc}, Stops={StopCount}",
+                driverId,
+                request.VehicleId,
+                request.AvailableSeats,
+                request.DepartureTimeUtc,
+                request.IntermediateStops?.Count ?? 0);
 
-        await _rides.AddRideAsync(ride, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+            _ = await _users.GetByIdAsync(driverId, cancellationToken) ?? throw new ApiException("Driver not found.", 404);
+            ValidateRideOffer(request);
+            await EnsureVehicleOwnershipAsync(driverId, request.VehicleId, cancellationToken);
 
-        ride = await _rides.GetRideByIdAsync(ride.Id, cancellationToken) ?? ride;
-        return MapRide(ride);
+            var ride = new RideOffer
+            {
+                Id = Guid.NewGuid(),
+                DriverId = driverId,
+                VehicleId = request.VehicleId,
+                OriginName = Truncate(request.Origin.Name, 300),
+                OriginAddress = Truncate(request.Origin.Address ?? request.Origin.Name, 500),
+                OriginLatitude = request.Origin.Latitude,
+                OriginLongitude = request.Origin.Longitude,
+                DestinationName = Truncate(request.Destination.Name, 300),
+                DestinationAddress = Truncate(request.Destination.Address ?? request.Destination.Name, 500),
+                DestinationLatitude = request.Destination.Latitude,
+                DestinationLongitude = request.Destination.Longitude,
+                DepartureTimeUtc = request.DepartureTimeUtc,
+                AvailableSeats = request.AvailableSeats,
+                PricePerSeat = request.PricePerSeat,
+                Notes = Truncate(request.Notes, 1000),
+                VehicleName = request.VehicleName,
+                VehicleNumber = request.VehicleNumber,
+                IntermediateStops = (request.IntermediateStops ?? [])
+                    .OrderBy(x => x.Order)
+                    .Select(x => new RideStop
+                    {
+                        Id = Guid.NewGuid(),
+                        Name = Truncate(x.Name, 200),
+                        Address = Truncate(x.Address ?? x.Name, 500),
+                        Latitude = x.Latitude,
+                        Longitude = x.Longitude,
+                        StopOrder = x.Order
+                    })
+                    .ToList()
+            };
+
+            await _rides.AddRideAsync(ride, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            ride = await _rides.GetRideByIdAsync(ride.Id, cancellationToken) ?? ride;
+            return MapRide(ride);
+        }
+        catch (ApiException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Offer ride failed. DriverId={DriverId}, VehicleId={VehicleId}, Pickup=({PickupLat},{PickupLng}), Destination=({DestLat},{DestLng}), Stops={StopCount}",
+                driverId,
+                request.VehicleId,
+                request.Origin?.Latitude,
+                request.Origin?.Longitude,
+                request.Destination?.Latitude,
+                request.Destination?.Longitude,
+                request.IntermediateStops?.Count ?? 0);
+            throw;
+        }
     }
 
     public async Task<PagedResult<RideOfferDto>> SearchAsync(SearchRideRequest request, CancellationToken cancellationToken)
@@ -93,6 +128,21 @@ public sealed class RideService : IRideService
             result.Page,
             result.PageSize,
             result.TotalCount);
+    }
+
+    public async Task<IReadOnlyList<RideOfferDto>> UpcomingActiveRidesAsync(CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var rides = await _rideOffers.Query()
+            .AsNoTracking()
+            .Include(x => x.Driver)
+            .Include(x => x.Bookings)
+            .Include(x => x.IntermediateStops)
+            .Where(x => (x.Status == RideStatus.Open || x.Status == RideStatus.Full) && x.DepartureTimeUtc > now)
+            .OrderBy(x => x.DepartureTimeUtc)
+            .Take(200)
+            .ToListAsync(cancellationToken);
+        return rides.Select(MapRide).ToList();
     }
 
     public async Task<RideOfferDto> DetailsAsync(Guid rideOfferId, CancellationToken cancellationToken) =>
@@ -125,6 +175,7 @@ public sealed class RideService : IRideService
         ride.DepartureTimeUtc = request.DepartureTimeUtc;
         ride.AvailableSeats = request.AvailableSeats;
         ride.PricePerSeat = request.PricePerSeat;
+        ride.Notes = Truncate(request.Notes, 1000);
         ride.VehicleName = request.VehicleName;
         ride.VehicleNumber = request.VehicleNumber;
         ride.IntermediateStops.Clear();
@@ -168,45 +219,116 @@ public sealed class RideService : IRideService
 
     public async Task<RideBookingDto> BookRideAsync(Guid passengerId, BookRideRequest request, CancellationToken cancellationToken)
     {
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-        var passenger = await _users.GetByIdAsync(passengerId, cancellationToken)
-            ?? throw new ApiException("Passenger not found.", 404);
-        var ride = await _rides.GetRideByIdAsync(request.RideOfferId, cancellationToken)
-            ?? throw new ApiException("Ride not found.", 404);
-
-        if (ride.DriverId == passengerId)
+        try
         {
-            throw new ApiException("Driver cannot book their own ride.");
+            _logger.LogInformation(
+                "Book ride request received. PassengerId={PassengerId}, RideId={RideId}, SeatsBooked={SeatsBooked}",
+                passengerId,
+                request.RideOfferId,
+                request.SeatsBooked);
+
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+            var passenger = await _users.GetByIdAsync(passengerId, cancellationToken)
+                ?? throw new ApiException("Passenger not found.", 404);
+            var ride = await _rides.GetRideByIdAsync(request.RideOfferId, cancellationToken)
+                ?? throw new ApiException("Ride not found.", 404);
+
+            _logger.LogInformation(
+                "Book ride loaded ride. RideId={RideId}, RideDriverId={RideDriverId}, AvailableSeats={AvailableSeats}, RideStatus={RideStatus}",
+                ride.Id,
+                ride.DriverId,
+                ride.AvailableSeats,
+                ride.Status);
+
+            var existingBooking = await _rideBookings.Query()
+                .FirstOrDefaultAsync(
+                    x => x.RideOfferId == request.RideOfferId
+                         && x.PassengerId == passengerId,
+                    cancellationToken);
+
+            _logger.LogInformation(
+                "Book ride existing booking. PassengerId={PassengerId}, RideId={RideId}, Exists={Exists}, ExistingStatus={ExistingStatus}",
+                passengerId,
+                request.RideOfferId,
+                existingBooking != null,
+                existingBooking?.Status);
+
+            if (existingBooking is { Status: BookingStatus.Confirmed })
+            {
+                throw new ApiException("You have already booked this ride.");
+            }
+
+            if (ride.DriverId == passengerId)
+            {
+                throw new ApiException("You cannot book your own ride.");
+            }
+
+            if (ride.AvailableSeats <= 0 || ride.Status == RideStatus.Full)
+            {
+                throw new ApiException("Ride is full.");
+            }
+
+            if (ride.Status != RideStatus.Open)
+            {
+                throw new ApiException("Ride is not open for booking.");
+            }
+
+            if (request.SeatsBooked <= 0 || request.SeatsBooked > ride.AvailableSeats)
+            {
+                throw new ApiException("Requested seats are not available.");
+            }
+
+            ride.AvailableSeats -= request.SeatsBooked;
+            ride.Status = ride.AvailableSeats == 0 ? RideStatus.Full : RideStatus.Open;
+            ride.UpdatedAtUtc = DateTime.UtcNow;
+
+            RideBooking booking;
+            if (existingBooking == null)
+            {
+                booking = new RideBooking
+                {
+                    Id = Guid.NewGuid(),
+                    PassengerId = passengerId,
+                    RideOfferId = ride.Id,
+                    SeatsBooked = request.SeatsBooked,
+                    Status = BookingStatus.Confirmed
+                };
+                await _rides.AddBookingAsync(booking, cancellationToken);
+            }
+            else
+            {
+                booking = existingBooking;
+                booking.SeatsBooked = request.SeatsBooked;
+                booking.Status = BookingStatus.Confirmed;
+                booking.CancelledAtUtc = null;
+            }
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await EnsureRideChatGroupAsync(ride.Id, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            booking.Passenger = passenger;
+            return MapBooking(booking);
         }
-
-        if (ride.Status != RideStatus.Open)
+        catch (ApiException)
         {
-            throw new ApiException("Ride is not open for booking.");
+            throw;
         }
-
-        if (request.SeatsBooked <= 0 || request.SeatsBooked > ride.AvailableSeats)
+        catch (DbUpdateException exception) when (exception.InnerException is SqlException sql && (sql.Number == 2627 || sql.Number == 2601))
         {
-            throw new ApiException("Requested seats are not available.");
+            _logger.LogWarning(exception, "Duplicate booking detected for passenger {PassengerId} and ride {RideId}", passengerId, request.RideOfferId);
+            throw new ApiException("You have already booked this ride.");
         }
-
-        ride.AvailableSeats -= request.SeatsBooked;
-        ride.Status = ride.AvailableSeats == 0 ? RideStatus.Full : RideStatus.Open;
-        ride.UpdatedAtUtc = DateTime.UtcNow;
-
-        var booking = new RideBooking
+        catch (Exception exception)
         {
-            Id = Guid.NewGuid(),
-            PassengerId = passengerId,
-            RideOfferId = ride.Id,
-            SeatsBooked = request.SeatsBooked
-        };
-
-        await _rides.AddBookingAsync(booking, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-        await EnsureRideChatGroupAsync(ride.Id, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        booking.Passenger = passenger;
-        return MapBooking(booking);
+            _logger.LogError(
+                exception,
+                "Book ride failed. PassengerId={PassengerId}, RideId={RideId}, Seats={SeatsBooked}, InnerException={InnerException}",
+                passengerId,
+                request.RideOfferId,
+                request.SeatsBooked,
+                exception.InnerException?.Message);
+            throw new ApiException(exception.InnerException?.Message ?? exception.Message, 500);
+        }
     }
 
     public async Task<IReadOnlyList<RideBookingDto>> ParticipantsAsync(Guid rideOfferId, CancellationToken cancellationToken)
@@ -349,6 +471,7 @@ public sealed class RideService : IRideService
             ride.AvailableSeats,
             ride.Bookings.Count(x => x.Status == BookingStatus.Confirmed),
             ride.PricePerSeat,
+            ride.Notes,
             ride.VehicleName,
             ride.VehicleNumber,
             ride.RoutePolyline,
@@ -372,10 +495,23 @@ public sealed class RideService : IRideService
 
     private async Task EnsureRideAccessAsync(Guid userId, Guid rideOfferId, CancellationToken cancellationToken)
     {
-        var ride = await _rides.GetRideByIdAsync(rideOfferId, cancellationToken) ?? throw new ApiException("Ride not found.", 404);
-        if (ride.DriverId == userId) return;
+        var rideOwner = await _rideOffers.Query()
+            .AsNoTracking()
+            .Where(x => x.Id == rideOfferId)
+            .Select(x => new { x.Id, x.DriverId })
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new ApiException("Ride not found.", 404);
+
+        if (rideOwner.DriverId == userId)
+        {
+            return;
+        }
+
+        // Backward compatibility: allow chat for booked passengers across legacy booking states.
         var isParticipant = await _rideBookings.Query().AnyAsync(
-            x => x.RideOfferId == rideOfferId && x.PassengerId == userId && x.Status == BookingStatus.Confirmed,
+            x => x.RideOfferId == rideOfferId
+                 && x.PassengerId == userId
+                 && (x.Status == BookingStatus.Confirmed || x.Status == BookingStatus.Pending),
             cancellationToken);
         if (!isParticipant)
         {
@@ -393,7 +529,7 @@ public sealed class RideService : IRideService
             booking.Status,
             booking.CreatedAtUtc);
 
-    private static string Truncate(string value, int maxLength)
+    private static string Truncate(string? value, int maxLength)
     {
         var text = value?.Trim() ?? string.Empty;
         if (text.Length <= maxLength) return text;

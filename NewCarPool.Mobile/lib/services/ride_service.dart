@@ -31,6 +31,12 @@ class RideService {
     return items.map((x) => RideOffer.fromJson(Map<String, dynamic>.from(x as Map))).toList();
   }
 
+  Future<List<RideOffer>> upcomingActiveRides() async {
+    final response = await _apiClient.dio.get('/rides/upcoming-active');
+    final items = response.data as List<dynamic>;
+    return items.map((x) => RideOffer.fromJson(Map<String, dynamic>.from(x as Map))).toList();
+  }
+
   Future<RideOffer> offerRide({
     required String vehicleId,
     required GeoPoint origin,

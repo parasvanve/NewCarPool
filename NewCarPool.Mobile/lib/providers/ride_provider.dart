@@ -42,6 +42,21 @@ class RideProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> loadUpcomingActive() async {
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      rides = await _rideService.upcomingActiveRides();
+    } catch (error) {
+      errorMessage = error.toString();
+      rethrow;
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<RideOffer> offerRide({
     required String vehicleId,
     required GeoPoint origin,

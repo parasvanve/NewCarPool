@@ -42,6 +42,9 @@ class RideOffer {
     required this.availableSeats,
     this.participantCount = 0,
     required this.pricePerSeat,
+    this.notes,
+    this.vehicleName,
+    this.vehicleNumber,
     required this.status,
   });
 
@@ -55,6 +58,9 @@ class RideOffer {
   final int availableSeats;
   final int participantCount;
   final num pricePerSeat;
+  final String? notes;
+  final String? vehicleName;
+  final String? vehicleNumber;
   final int status;
 
   factory RideOffer.fromJson(Map<String, dynamic> json) => RideOffer(
@@ -71,6 +77,9 @@ class RideOffer {
         availableSeats: json['availableSeats'],
         participantCount: (json['participantCount'] as num?)?.toInt() ?? 0,
         pricePerSeat: json['pricePerSeat'],
+        notes: json['notes']?.toString(),
+        vehicleName: json['vehicleName']?.toString(),
+        vehicleNumber: json['vehicleNumber']?.toString(),
         status: json['status'],
       );
 }

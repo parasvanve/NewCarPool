@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:new_car_pool/screens/rides/offer_ride_form_screen.dart';
-import 'package:new_car_pool/screens/rides/search_ride_form_screen.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import 'offer_ride_form_screen.dart';
+import 'search_ride_form_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});

@@ -1,10 +1,13 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import 'package:dio/dio.dart';
 
+import '../../core/errors/app_exception.dart';
 import '../../core/widgets/app_design_system.dart';
 import '../../models/booking_models.dart';
 import '../../models/ride_models.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/booking_provider.dart';
 import '../../providers/ride_provider.dart';
 
@@ -19,12 +22,14 @@ class TripsScreen extends StatefulWidget {
 
 class _TripsScreenState extends State<TripsScreen> {
   int _tab = 0; // 0 upcoming, 1 completed, 2 cancelled
+  String? _bookingRideId;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<BookingProvider>().loadHistory();
+      context.read<RideProvider>().loadUpcomingActive();
     });
   }
 
@@ -32,6 +37,7 @@ class _TripsScreenState extends State<TripsScreen> {
   Widget build(BuildContext context) {
     final rideProvider = context.watch<RideProvider>();
     final bookingProvider = context.watch<BookingProvider>();
+    final myUserId = context.watch<AuthProvider>().session?.userId;
 
     return Scaffold(
       backgroundColor: AppDesignTokens.pageBg,
@@ -78,17 +84,64 @@ class _TripsScreenState extends State<TripsScreen> {
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 250),
                   child: _TripsContent(
-                    key: ValueKey('trip-tab-$_tab-${rideProvider.rides.length}-${bookingProvider.bookings.length}'),
+                    key: ValueKey(
+                        'trip-tab-$_tab-${rideProvider.rides.length}-${bookingProvider.bookings.length}'),
                     tab: _tab,
+                    currentUserId: myUserId,
                     rides: rideProvider.rides,
                     bookings: bookingProvider.bookings,
+                    rideError: rideProvider.errorMessage,
+                    rideLoading: rideProvider.isLoading,
                     loadingBookings: bookingProvider.isLoading,
-                    onRefresh: () => context.read<BookingProvider>().loadHistory(),
+                    bookingRideId: _bookingRideId,
+                    onRefresh: () async {
+                      await context.read<RideProvider>().loadUpcomingActive();
+                      await context.read<BookingProvider>().loadHistory();
+                    },
+                    onBookRide: (ride) async {
+                      setState(() => _bookingRideId = ride.id);
+                      final messenger = ScaffoldMessenger.of(context);
+                      try {
+                        await context.read<BookingProvider>().request(
+                              rideOfferId: ride.id,
+                              seatsBooked: 1,
+                            );
+                        if (!mounted) return;
+                        messenger.showSnackBar(
+                          const SnackBar(
+                              content: Text('Ride booked successfully')),
+                        );
+                        await context.read<RideProvider>().loadUpcomingActive();
+                      } on DioException catch (error) {
+                        if (!mounted) return;
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(AppException.fromDio(error).message),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      } catch (error) {
+                        if (!mounted) return;
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(error.toString()),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      } finally {
+                        if (mounted) {
+                          setState(() => _bookingRideId = null);
+                        }
+                      }
+                    },
                     onRideAction: (ride, action) async {
                       final provider = context.read<RideProvider>();
                       if (action == 'start') await provider.startRide(ride.id);
-                      if (action == 'complete') await provider.completeRide(ride.id);
-                      if (action == 'cancel') await provider.cancelRide(ride.id);
+                      if (action == 'complete')
+                        await provider.completeRide(ride.id);
+                      if (action == 'cancel')
+                        await provider.cancelRide(ride.id);
+                      await provider.loadUpcomingActive();
                     },
                   ),
                 ),
@@ -105,41 +158,80 @@ class _TripsContent extends StatelessWidget {
   const _TripsContent({
     super.key,
     required this.tab,
+    required this.currentUserId,
     required this.rides,
     required this.bookings,
+    required this.rideError,
+    required this.rideLoading,
     required this.loadingBookings,
+    required this.bookingRideId,
     required this.onRefresh,
+    required this.onBookRide,
     required this.onRideAction,
   });
 
   final int tab;
+  final String? currentUserId;
   final List<RideOffer> rides;
   final List<RideBooking> bookings;
+  final String? rideError;
+  final bool rideLoading;
   final bool loadingBookings;
+  final String? bookingRideId;
   final Future<void> Function() onRefresh;
+  final Future<void> Function(RideOffer ride) onBookRide;
   final Future<void> Function(RideOffer ride, String action) onRideAction;
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now().toUtc();
-    final upcomingRides = rides.where((r) => r.departureTimeUtc.isAfter(now)).toList();
-    final completedRides = rides.where((r) => r.status == 2).toList();
-    final cancelledRides = rides.where((r) => r.status == 3).toList();
+    final upcomingRides = rides;
+    final completedRides = const <RideOffer>[];
+    final cancelledRides = const <RideOffer>[];
 
     final list = switch (tab) {
       0 => upcomingRides,
       1 => completedRides,
       _ => cancelledRides,
     };
+
     final bookingList = bookings.where((booking) {
       final status = booking.bookingStatus;
-      if (tab == 0) return status == BookingStatus.pending || status == BookingStatus.accepted;
+      if (tab == 0)
+        return status == BookingStatus.pending ||
+            status == BookingStatus.accepted;
       if (tab == 1) return status == BookingStatus.completed;
-      return status == BookingStatus.rejected || status == BookingStatus.cancelled;
+      return status == BookingStatus.rejected ||
+          status == BookingStatus.cancelled;
     }).toList();
 
-    if (loadingBookings && rides.isEmpty && bookings.isEmpty) {
+    if (rideLoading && rides.isEmpty) {
       return const Center(child: CircularProgressIndicator());
+    }
+
+    if (tab == 0 &&
+        rideError != null &&
+        rideError!.trim().isNotEmpty &&
+        rides.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline,
+                  size: 54, color: Colors.redAccent),
+              const SizedBox(height: 10),
+              Text(rideError!, textAlign: TextAlign.center),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     return RefreshIndicator(
@@ -148,11 +240,16 @@ class _TripsContent extends StatelessWidget {
           ? ListView(
               children: [
                 const SizedBox(height: 140),
-                Icon(Icons.calendar_month_outlined, size: 54, color: Colors.grey.shade400),
+                Icon(Icons.calendar_month_outlined,
+                    size: 54, color: Colors.grey.shade400),
                 const SizedBox(height: 8),
                 Center(
                   child: Text(
-                    tab == 0 ? 'No upcoming trips' : tab == 1 ? 'No completed trips' : 'No cancelled trips',
+                    tab == 0
+                        ? 'No upcoming rides available'
+                        : tab == 1
+                            ? 'No completed trips'
+                            : 'No cancelled trips',
                   ),
                 ),
               ],
@@ -163,17 +260,31 @@ class _TripsContent extends StatelessWidget {
                 ...list.map(
                   (ride) => _TripRideCard(
                     ride: ride,
-                    statusLabel: tab == 0 ? 'Upcoming' : tab == 1 ? 'Completed' : 'Cancelled',
+                    statusLabel: tab == 0
+                        ? 'Upcoming'
+                        : tab == 1
+                            ? 'Completed'
+                            : 'Cancelled',
+                    currentUserId: currentUserId,
+                    isBooking: bookingRideId == ride.id,
+                    onBook: tab == 0 ? () => onBookRide(ride) : null,
                     onAction: (action) => onRideAction(ride, action),
                   ),
                 ),
+                if (loadingBookings && bookings.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 16),
+                    child: Center(child: CircularProgressIndicator()),
+                  ),
                 ...bookingList.map(
                   (booking) => Card(
                     margin: const EdgeInsets.only(bottom: 12),
                     child: ListTile(
                       leading: const Icon(Icons.confirmation_number_outlined),
-                      title: Text('Booking ${booking.id.substring(0, booking.id.length > 8 ? 8 : booking.id.length)}'),
-                      subtitle: Text('${booking.seatsBooked} seat(s) • ${booking.bookingStatus.label}'),
+                      title: Text(
+                          'Booking ${booking.id.substring(0, booking.id.length > 8 ? 8 : booking.id.length)}'),
+                      subtitle: Text(
+                          '${booking.seatsBooked} seat(s) • ${booking.bookingStatus.label}'),
                     ),
                   ),
                 ),
@@ -187,15 +298,25 @@ class _TripRideCard extends StatelessWidget {
   const _TripRideCard({
     required this.ride,
     required this.statusLabel,
+    required this.currentUserId,
+    required this.isBooking,
+    required this.onBook,
     required this.onAction,
   });
 
   final RideOffer ride;
   final String statusLabel;
+  final String? currentUserId;
+  final bool isBooking;
+  final VoidCallback? onBook;
   final Future<void> Function(String action) onAction;
 
   @override
   Widget build(BuildContext context) {
+    final isOwner = currentUserId != null && currentUserId == ride.driverId;
+    final canBook =
+        !isOwner && ride.availableSeats > 0 && statusLabel == 'Upcoming';
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
@@ -217,7 +338,11 @@ class _TripRideCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Text(DateFormat('dd MMM, hh:mm a').format(ride.departureTimeUtc.toLocal())),
+            Text(
+                'Driver: ${ride.driverName.isEmpty ? 'Driver' : ride.driverName}'),
+            const SizedBox(height: 2),
+            Text(DateFormat('dd MMM, hh:mm a')
+                .format(ride.departureTimeUtc.toLocal())),
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
@@ -225,17 +350,46 @@ class _TripRideCard extends StatelessWidget {
               children: [
                 Chip(label: Text('₹${ride.pricePerSeat} / seat')),
                 Chip(label: Text('${ride.availableSeats} seats')),
+                if ((ride.vehicleName ?? '').trim().isNotEmpty ||
+                    (ride.vehicleNumber ?? '').trim().isNotEmpty)
+                  Chip(
+                      label: Text(
+                          '${ride.vehicleName ?? ''} ${ride.vehicleNumber ?? ''}'
+                              .trim())),
               ],
             ),
             if (statusLabel == 'Upcoming') ...[
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  TextButton(onPressed: () => onAction('start'), child: const Text('Start')),
-                  TextButton(onPressed: () => onAction('complete'), child: const Text('Complete')),
-                  TextButton(onPressed: () => onAction('cancel'), child: const Text('Cancel')),
-                ],
-              ),
+              if (isOwner)
+                Row(
+                  children: [
+                    TextButton(
+                        onPressed: () => onAction('start'),
+                        child: const Text('Start')),
+                    TextButton(
+                        onPressed: () => onAction('complete'),
+                        child: const Text('Complete')),
+                    TextButton(
+                        onPressed: () => onAction('cancel'),
+                        child: const Text('Cancel')),
+                  ],
+                )
+              else
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilledButton.icon(
+                    onPressed: canBook && !isBooking ? onBook : null,
+                    icon: isBooking
+                        ? const SizedBox(
+                            width: 14,
+                            height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.event_seat_outlined),
+                    label: Text(
+                        ride.availableSeats <= 0 ? 'Ride Full' : 'Book Ride'),
+                  ),
+                ),
             ],
           ],
         ),
@@ -293,3 +447,4 @@ class _StatusBadge extends StatelessWidget {
     );
   }
 }
+

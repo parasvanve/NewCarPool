@@ -311,7 +311,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
 
     setState(() => _isSubmitting = true);
     try {
-      final ride = await context.read<RideProvider>().offerRide(
+      await context.read<RideProvider>().offerRide(
             vehicleId: v.id,
             origin: GeoPoint(name: _pickupCtrl.text.trim(), address: _pickupCtrl.text.trim(), latitude: route.pickup!.latitude, longitude: route.pickup!.longitude),
             destination: GeoPoint(name: _destCtrl.text.trim(), address: _destinationAddress ?? _destCtrl.text.trim(), latitude: route.destination!.latitude, longitude: route.destination!.longitude),
@@ -324,7 +324,13 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
             vehicleNumber: v.vehicleNumber,
           );
       if (!mounted) return;
-      context.push(AppRoutes.rideDetails, extra: ride);
+      context.read<RideProvider>().loadUpcomingActive().catchError((_) {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ride created successfully')),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (!mounted) return;
+      context.go(AppRoutes.dashboard);
     } on DioException catch (e) {
       _showInlineWarning(AppException.fromDio(e).message);
     } catch (e) {

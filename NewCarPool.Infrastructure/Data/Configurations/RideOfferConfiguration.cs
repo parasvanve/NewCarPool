@@ -15,6 +15,7 @@ public sealed class RideOfferConfiguration : IEntityTypeConfiguration<RideOffer>
         builder.Property(x => x.DestinationName).HasMaxLength(300).IsRequired();
         builder.Property(x => x.DestinationAddress).HasMaxLength(500).IsRequired();
         builder.Property(x => x.PricePerSeat).HasPrecision(10, 2);
+        builder.Property(x => x.Notes).HasMaxLength(1000);
         builder.Property(x => x.VehicleName).HasMaxLength(100);
         builder.Property(x => x.VehicleNumber).HasMaxLength(30);
         builder.Property(x => x.RoutePolyline).HasMaxLength(8000);

@@ -18,6 +18,7 @@ public sealed class RideOffer
     public DateTime DepartureTimeUtc { get; set; }
     public int AvailableSeats { get; set; }
     public decimal PricePerSeat { get; set; }
+    public string? Notes { get; set; }
     public string? VehicleName { get; set; }
     public string? VehicleNumber { get; set; }
     public string? RoutePolyline { get; set; }

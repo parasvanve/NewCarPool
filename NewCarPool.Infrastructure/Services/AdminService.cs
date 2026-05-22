@@ -60,7 +60,7 @@ public sealed class AdminService : IAdminService
             x.IntermediateStops.OrderBy(s => s.StopOrder)
                 .Select(s => new RideStopDto(s.Name, s.Address, s.Latitude, s.Longitude, s.StopOrder))
                 .ToList(),
-            x.DepartureTimeUtc, x.AvailableSeats, x.Bookings.Count(b => b.Status == BookingStatus.Confirmed), x.PricePerSeat, x.VehicleName, x.VehicleNumber, x.RoutePolyline, x.DistanceKm, x.EtaMinutes, x.Status)).ToListAsync(cancellationToken);
+            x.DepartureTimeUtc, x.AvailableSeats, x.Bookings.Count(b => b.Status == BookingStatus.Confirmed), x.PricePerSeat, x.Notes, x.VehicleName, x.VehicleNumber, x.RoutePolyline, x.DistanceKm, x.EtaMinutes, x.Status)).ToListAsync(cancellationToken);
 
     public async Task<DashboardStatsDto> GetStatsAsync(CancellationToken cancellationToken) =>
         new(

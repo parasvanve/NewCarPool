@@ -24,6 +24,10 @@ public sealed class RidesController : ControllerBase
     public async Task<ActionResult<PagedResult<RideOfferDto>>> Search([FromQuery] SearchRideRequest request, CancellationToken cancellationToken) =>
         Ok(await _rideService.SearchAsync(request, cancellationToken));
 
+    [HttpGet("upcoming-active")]
+    public async Task<ActionResult<IReadOnlyList<RideOfferDto>>> UpcomingActive(CancellationToken cancellationToken) =>
+        Ok(await _rideService.UpcomingActiveRidesAsync(cancellationToken));
+
     [HttpGet("{rideOfferId:guid}")]
     public async Task<ActionResult<RideOfferDto>> Details(Guid rideOfferId, CancellationToken cancellationToken) =>
         Ok(await _rideService.DetailsAsync(rideOfferId, cancellationToken));

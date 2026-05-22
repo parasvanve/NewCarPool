@@ -26,6 +26,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _index = 0;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<RideProvider>().loadUpcomingActive();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final pages = [
       const _HomeTab(),

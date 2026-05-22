@@ -14,6 +14,7 @@ public sealed record RideOfferDto(
     int AvailableSeats,
     int ParticipantCount,
     decimal PricePerSeat,
+    string? Notes,
     string? VehicleName,
     string? VehicleNumber,
     string? RoutePolyline,

@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:dio/dio.dart';
 
+import '../../core/errors/app_exception.dart';
 import '../../models/ride_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/booking_provider.dart';
+import '../../providers/ride_provider.dart';
 
 class BookingFlowScreen extends StatefulWidget {
   const BookingFlowScreen({super.key, this.extra});
@@ -86,15 +89,16 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                               seatsBooked: seats,
                             );
                             if (!mounted) return;
+                            await context.read<RideProvider>().loadUpcomingActive();
                             messenger.showSnackBar(
                               SnackBar(
-                                content: Text('Seat booked successfully. You have joined this ride.'),
+                                content: Text('Ride booked successfully'),
                               ),
                             );
                             navigator.pop();
-                          } catch (error) {
+                          } on DioException catch (error) {
                             if (!mounted) return;
-                            final message = error.toString();
+                            final message = AppException.fromDio(error).message;
                             if (message.contains('Driver cannot book their own ride')) {
                               messenger.showSnackBar(
                                 const SnackBar(
@@ -106,6 +110,11 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                             }
                             messenger.showSnackBar(
                               SnackBar(content: Text(message), backgroundColor: Colors.red),
+                            );
+                          } catch (error) {
+                            if (!mounted) return;
+                            messenger.showSnackBar(
+                              SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
                             );
                           } finally {
                             if (mounted) setState(() => submitting = false);

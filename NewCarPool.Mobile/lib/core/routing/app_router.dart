@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:new_car_pool/screens/rides/offer_ride_form_screen.dart';
-import 'package:new_car_pool/screens/rides/search_ride_form_screen.dart';
 import '../constants/app_routes.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/register_screen.dart';
@@ -16,7 +14,9 @@ import '../../screens/profile/help_support_screen.dart';
 import '../../screens/rides/booking_flow_screen.dart';
 import '../../screens/rides/driver_requests_screen.dart';
 import '../../screens/rides/live_tracking_screen.dart';
+import '../../screens/rides/offer_ride_form_screen.dart';
 import '../../screens/rides/ride_details_screen.dart';
+import '../../screens/rides/search_ride_form_screen.dart';
 import '../../screens/trips/trips_screen.dart';
 import '../../screens/vehicles/vehicle_screens.dart';
 
