@@ -10,7 +10,8 @@ import 'ride_details_screen.dart';
 enum RideSort { nearby, cheapest, soonest }
 
 class RideResultsScreen extends StatefulWidget {
-  const RideResultsScreen({super.key, required this.pickup, required this.destination});
+  const RideResultsScreen(
+      {super.key, required this.pickup, required this.destination});
 
   final String pickup;
   final String destination;
@@ -27,7 +28,9 @@ class _RideResultsScreenState extends State<RideResultsScreen> {
   @override
   void initState() {
     super.initState();
-    context.read<RideProvider>().startAutoRefresh(interval: const Duration(seconds: 8));
+    context
+        .read<RideProvider>()
+        .startAutoRefresh(interval: const Duration(seconds: 8));
   }
 
   @override
@@ -37,16 +40,21 @@ class _RideResultsScreenState extends State<RideResultsScreen> {
   }
 
   List<RideOffer> _visibleRides(List<RideOffer> rides) {
-    final filtered = rides.where((r) => r.availableSeats >= _minSeats && r.pricePerSeat <= _maxPrice).toList();
+    final filtered = rides
+        .where(
+            (r) => r.availableSeats >= _minSeats && r.pricePerSeat <= _maxPrice)
+        .toList();
     switch (_sort) {
       case RideSort.cheapest:
         filtered.sort((a, b) => a.pricePerSeat.compareTo(b.pricePerSeat));
         break;
       case RideSort.soonest:
-        filtered.sort((a, b) => a.departureTimeUtc.compareTo(b.departureTimeUtc));
+        filtered
+            .sort((a, b) => a.departureTimeUtc.compareTo(b.departureTimeUtc));
         break;
       case RideSort.nearby:
-        filtered.sort((a, b) => b.availableSeats.compareTo(a.availableSeats));
+        filtered
+            .sort((a, b) => a.departureTimeUtc.compareTo(b.departureTimeUtc));
         break;
     }
     return filtered;
@@ -103,7 +111,8 @@ class _RideResultsScreenState extends State<RideResultsScreen> {
                     ),
                   ),
                 ),
-                IconButton.filledTonal(onPressed: _openFilters, icon: const Icon(Icons.tune)),
+                IconButton.filledTonal(
+                    onPressed: _openFilters, icon: const Icon(Icons.tune)),
               ],
             ),
           ),
@@ -119,7 +128,10 @@ class _RideResultsScreenState extends State<RideResultsScreen> {
                           final ride = rides[index];
                           return _RideCard(
                             ride: ride,
-                            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride))),
+                            onTap: () => Navigator.of(context).push(
+                                MaterialPageRoute(
+                                    builder: (_) =>
+                                        RideDetailsScreen(extra: ride))),
                           );
                         },
                       ),
@@ -130,10 +142,11 @@ class _RideResultsScreenState extends State<RideResultsScreen> {
   }
 
   Future<void> _openFilters() async {
-    final result = await showModalBottomSheet<(int, int)>(
+    final result = await showModalBottomSheet<Map<String, int>>(
       context: context,
       showDragHandle: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) {
         var tempMaxPrice = _maxPrice.toDouble();
         var tempMinSeats = _minSeats.toDouble();
@@ -147,14 +160,30 @@ class _RideResultsScreenState extends State<RideResultsScreen> {
                 Text('Filters', style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: 12),
                 Text('Max price per seat: INR ${tempMaxPrice.toInt()}'),
-                Slider(min: 100, max: 3000, divisions: 29, value: tempMaxPrice, onChanged: (v) => setSheetState(() => tempMaxPrice = v)),
+                Slider(
+                    min: 100,
+                    max: 3000,
+                    divisions: 29,
+                    value: tempMaxPrice,
+                    onChanged: (v) => setSheetState(() => tempMaxPrice = v)),
                 Text('Minimum seats: ${tempMinSeats.toInt()}'),
-                Slider(min: 1, max: 6, divisions: 5, value: tempMinSeats, onChanged: (v) => setSheetState(() => tempMinSeats = v)),
+                Slider(
+                    min: 1,
+                    max: 6,
+                    divisions: 5,
+                    value: tempMinSeats,
+                    onChanged: (v) => setSheetState(() => tempMinSeats = v)),
                 const SizedBox(height: 8),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: () => Navigator.pop(context, (tempMaxPrice.toInt(), tempMinSeats.toInt())),
+                    onPressed: () => Navigator.pop(
+                      context,
+                      <String, int>{
+                        'maxPrice': tempMaxPrice.toInt(),
+                        'minSeats': tempMinSeats.toInt(),
+                      },
+                    ),
                     child: const Text('Apply Filters'),
                   ),
                 ),
@@ -167,8 +196,8 @@ class _RideResultsScreenState extends State<RideResultsScreen> {
 
     if (result != null) {
       setState(() {
-        _maxPrice = result.$1;
-        _minSeats = result.$2;
+        _maxPrice = result['maxPrice'] ?? _maxPrice;
+        _minSeats = result['minSeats'] ?? _minSeats;
       });
     }
   }
@@ -196,34 +225,60 @@ class _RideCard extends StatelessWidget {
                   CircleAvatar(
                     radius: 22,
                     backgroundColor: const Color(0xFFDCFCE7),
-                    child: Text((ride.driverName.isEmpty ? 'D' : ride.driverName[0]).toUpperCase(), style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF166534))),
+                    child: Text(
+                        (ride.driverName.isEmpty ? 'D' : ride.driverName[0])
+                            .toUpperCase(),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF166534))),
                   ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(ride.driverName.isEmpty ? 'Driver' : ride.driverName, style: const TextStyle(fontWeight: FontWeight.w700)),
+                        Text(
+                            ride.driverName.isEmpty
+                                ? 'Driver'
+                                : ride.driverName,
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 2),
-                        Text(DateFormat('dd MMM, hh:mm a').format(ride.departureTimeUtc.toLocal()), style: Theme.of(context).textTheme.bodySmall),
+                        Text(
+                            DateFormat('dd MMM, hh:mm a')
+                                .format(ride.departureTimeUtc.toLocal()),
+                            style: Theme.of(context).textTheme.bodySmall),
                       ],
                     ),
                   ),
-                  Text('INR ${ride.pricePerSeat}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16, color: AppDesignTokens.brandStart)),
+                  Text('INR ${ride.pricePerSeat}',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          color: AppDesignTokens.brandStart)),
                 ],
               ),
               const SizedBox(height: 10),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(12)),
-                child: Text('${ride.origin.name} -> ${ride.destination.name}', maxLines: 2, overflow: TextOverflow.ellipsis),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12)),
+                child: Text('${ride.origin.name} -> ${ride.destination.name}',
+                    maxLines: 2, overflow: TextOverflow.ellipsis),
               ),
               if (ride.intermediateStops.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Wrap(spacing: 6, runSpacing: 6, children: ride.intermediateStops.take(3).map((s) => Chip(label: Text(s.name))).toList()),
+                  child: Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: ride.intermediateStops
+                          .take(3)
+                          .map((s) => Chip(label: Text(s.name)))
+                          .toList()),
                 ),
               ],
               if ((ride.notes ?? '').trim().isNotEmpty) ...[
@@ -241,13 +296,21 @@ class _RideCard extends StatelessWidget {
               const SizedBox(height: 10),
               Row(
                 children: [
-                  Chip(label: Text('${ride.availableSeats} seats'), avatar: const Icon(Icons.event_seat, size: 16)),
+                  Chip(
+                      label: Text('${ride.availableSeats} seats'),
+                      avatar: const Icon(Icons.event_seat, size: 16)),
                   const SizedBox(width: 8),
-                  Chip(label: Text('${ride.participantCount} joined'), avatar: const Icon(Icons.group_outlined, size: 16)),
+                  Chip(
+                      label: Text('${ride.participantCount} joined'),
+                      avatar: const Icon(Icons.group_outlined, size: 16)),
                   const Spacer(),
                   Text(
                     ride.availableSeats <= 0 ? 'Ride Full' : 'Open',
-                    style: TextStyle(color: ride.availableSeats <= 0 ? Colors.red : Colors.green, fontWeight: FontWeight.w700),
+                    style: TextStyle(
+                        color: ride.availableSeats <= 0
+                            ? Colors.red
+                            : Colors.green,
+                        fontWeight: FontWeight.w700),
                   ),
                 ],
               ),
@@ -302,11 +365,16 @@ class _EmptyState extends StatelessWidget {
           children: [
             const Icon(Icons.route_outlined, size: 56, color: Colors.grey),
             const SizedBox(height: 10),
-            const Text('No rides found for this route.', style: TextStyle(fontWeight: FontWeight.w600)),
+            const Text('No rides found for this route.',
+                style: TextStyle(fontWeight: FontWeight.w600)),
             const SizedBox(height: 6),
-            const Text('Try changing seats, date, or destination.', textAlign: TextAlign.center),
+            const Text('Try changing seats, date, or destination.',
+                textAlign: TextAlign.center),
             const SizedBox(height: 14),
-            OutlinedButton.icon(onPressed: onRetry, icon: const Icon(Icons.arrow_back), label: const Text('Back to Search')),
+            OutlinedButton.icon(
+                onPressed: onRetry,
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Back to Search')),
           ],
         ),
       ),

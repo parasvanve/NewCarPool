@@ -219,18 +219,24 @@ public sealed class RideService : IRideService
 
     public async Task<RideBookingDto> BookRideAsync(Guid passengerId, BookRideRequest request, CancellationToken cancellationToken)
     {
+        var rideId = request.EffectiveRideId;
         try
         {
+            if (rideId == Guid.Empty)
+            {
+                throw new ApiException("Ride id is required.");
+            }
+
             _logger.LogInformation(
                 "Book ride request received. PassengerId={PassengerId}, RideId={RideId}, SeatsBooked={SeatsBooked}",
                 passengerId,
-                request.RideOfferId,
+                rideId,
                 request.SeatsBooked);
 
             await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
             var passenger = await _users.GetByIdAsync(passengerId, cancellationToken)
                 ?? throw new ApiException("Passenger not found.", 404);
-            var ride = await _rides.GetRideByIdAsync(request.RideOfferId, cancellationToken)
+            var ride = await _rides.GetRideByIdAsync(rideId, cancellationToken)
                 ?? throw new ApiException("Ride not found.", 404);
 
             _logger.LogInformation(
@@ -242,14 +248,14 @@ public sealed class RideService : IRideService
 
             var existingBooking = await _rideBookings.Query()
                 .FirstOrDefaultAsync(
-                    x => x.RideOfferId == request.RideOfferId
+                    x => x.RideOfferId == rideId
                          && x.PassengerId == passengerId,
                     cancellationToken);
 
             _logger.LogInformation(
                 "Book ride existing booking. PassengerId={PassengerId}, RideId={RideId}, Exists={Exists}, ExistingStatus={ExistingStatus}",
                 passengerId,
-                request.RideOfferId,
+                rideId,
                 existingBooking != null,
                 existingBooking?.Status);
 
@@ -278,6 +284,9 @@ public sealed class RideService : IRideService
                 throw new ApiException("Requested seats are not available.");
             }
 
+            ValidateBookingPoint(request.Pickup, "Pickup");
+            ValidateBookingPoint(request.Drop, "Drop");
+
             ride.AvailableSeats -= request.SeatsBooked;
             ride.Status = ride.AvailableSeats == 0 ? RideStatus.Full : RideStatus.Open;
             ride.UpdatedAtUtc = DateTime.UtcNow;
@@ -291,6 +300,14 @@ public sealed class RideService : IRideService
                     PassengerId = passengerId,
                     RideOfferId = ride.Id,
                     SeatsBooked = request.SeatsBooked,
+                    PassengerPickupName = Truncate(request.Pickup.Name, 300),
+                    PassengerPickupAddress = Truncate(request.Pickup.Address ?? request.Pickup.Name, 500),
+                    PassengerPickupLatitude = request.Pickup.Latitude,
+                    PassengerPickupLongitude = request.Pickup.Longitude,
+                    PassengerDropName = Truncate(request.Drop.Name, 300),
+                    PassengerDropAddress = Truncate(request.Drop.Address ?? request.Drop.Name, 500),
+                    PassengerDropLatitude = request.Drop.Latitude,
+                    PassengerDropLongitude = request.Drop.Longitude,
                     Status = BookingStatus.Confirmed
                 };
                 await _rides.AddBookingAsync(booking, cancellationToken);
@@ -299,9 +316,32 @@ public sealed class RideService : IRideService
             {
                 booking = existingBooking;
                 booking.SeatsBooked = request.SeatsBooked;
+                booking.PassengerPickupName = Truncate(request.Pickup.Name, 300);
+                booking.PassengerPickupAddress = Truncate(request.Pickup.Address ?? request.Pickup.Name, 500);
+                booking.PassengerPickupLatitude = request.Pickup.Latitude;
+                booking.PassengerPickupLongitude = request.Pickup.Longitude;
+                booking.PassengerDropName = Truncate(request.Drop.Name, 300);
+                booking.PassengerDropAddress = Truncate(request.Drop.Address ?? request.Drop.Name, 500);
+                booking.PassengerDropLatitude = request.Drop.Latitude;
+                booking.PassengerDropLongitude = request.Drop.Longitude;
                 booking.Status = BookingStatus.Confirmed;
                 booking.CancelledAtUtc = null;
             }
+
+            var notificationMessage =
+                $"{passenger.FullName} booked your ride from {ride.OriginName} to {ride.DestinationName}. " +
+                $"Pickup: {booking.PassengerPickupName}. Drop: {booking.PassengerDropName}. Seats: {booking.SeatsBooked}.";
+            _dbContext.Notifications.Add(new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = ride.DriverId,
+                Title = "New ride booking",
+                Message = Truncate(notificationMessage, 1000),
+                Type = NotificationType.RideBooked,
+                RideId = ride.Id,
+                BookingId = booking.Id,
+                CreatedAtUtc = DateTime.UtcNow
+            });
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             await EnsureRideChatGroupAsync(ride.Id, cancellationToken);
@@ -315,7 +355,7 @@ public sealed class RideService : IRideService
         }
         catch (DbUpdateException exception) when (exception.InnerException is SqlException sql && (sql.Number == 2627 || sql.Number == 2601))
         {
-            _logger.LogWarning(exception, "Duplicate booking detected for passenger {PassengerId} and ride {RideId}", passengerId, request.RideOfferId);
+            _logger.LogWarning(exception, "Duplicate booking detected for passenger {PassengerId} and ride {RideId}", passengerId, request.EffectiveRideId);
             throw new ApiException("You have already booked this ride.");
         }
         catch (Exception exception)
@@ -324,7 +364,7 @@ public sealed class RideService : IRideService
                 exception,
                 "Book ride failed. PassengerId={PassengerId}, RideId={RideId}, Seats={SeatsBooked}, InnerException={InnerException}",
                 passengerId,
-                request.RideOfferId,
+                rideId,
                 request.SeatsBooked,
                 exception.InnerException?.Message);
             throw new ApiException(exception.InnerException?.Message ?? exception.Message, 500);
@@ -436,6 +476,19 @@ public sealed class RideService : IRideService
         }
     }
 
+    private static void ValidateBookingPoint(GeoPointDto point, string label)
+    {
+        if (point is null || string.IsNullOrWhiteSpace(point.Name))
+        {
+            throw new ApiException($"{label} point is required.");
+        }
+
+        if (point.Latitude is < -90 or > 90 || point.Longitude is < -180 or > 180)
+        {
+            throw new ApiException($"{label} coordinates are invalid.");
+        }
+    }
+
     private async Task EnsureVehicleOwnershipAsync(Guid driverId, Guid vehicleId, CancellationToken cancellationToken)
     {
         var vehicleExists = await _dbContext.Vehicles
@@ -526,6 +579,16 @@ public sealed class RideService : IRideService
             booking.PassengerId,
             booking.Passenger?.FullName ?? string.Empty,
             booking.SeatsBooked,
+            new GeoPointDto(
+                booking.PassengerPickupName,
+                booking.PassengerPickupLatitude,
+                booking.PassengerPickupLongitude,
+                booking.PassengerPickupAddress),
+            new GeoPointDto(
+                booking.PassengerDropName,
+                booking.PassengerDropLatitude,
+                booking.PassengerDropLongitude,
+                booking.PassengerDropAddress),
             booking.Status,
             booking.CreatedAtUtc);
 

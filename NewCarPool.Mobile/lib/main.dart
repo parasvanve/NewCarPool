@@ -31,6 +31,7 @@ class NewCarPoolApp extends StatelessWidget {
       providers: [
         Provider.value(value: dependencies.apiClient),
         Provider.value(value: dependencies.tokenStore),
+        Provider.value(value: dependencies.rideService),
         Provider.value(value: dependencies.vehicleService),
         Provider.value(value: dependencies.bookingService),
         Provider.value(value: dependencies.paymentService),

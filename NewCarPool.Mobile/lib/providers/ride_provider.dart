@@ -10,6 +10,7 @@ class RideProvider extends ChangeNotifier {
 
   final RideService _rideService;
   List<RideOffer> rides = [];
+  List<RideOffer> get upcomingActiveRides => rides;
   bool isLoading = false;
   String? errorMessage;
   Timer? _refreshTimer;

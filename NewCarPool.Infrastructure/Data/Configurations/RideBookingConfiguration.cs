@@ -11,6 +11,10 @@ public sealed class RideBookingConfiguration : IEntityTypeConfiguration<RideBook
         builder.ToTable("RideBookings");
         builder.HasKey(x => x.Id);
         builder.HasIndex(x => new { x.RideOfferId, x.PassengerId });
+        builder.Property(x => x.PassengerPickupName).HasMaxLength(300);
+        builder.Property(x => x.PassengerPickupAddress).HasMaxLength(500);
+        builder.Property(x => x.PassengerDropName).HasMaxLength(300);
+        builder.Property(x => x.PassengerDropAddress).HasMaxLength(500);
         builder.HasOne(x => x.RideOffer)
             .WithMany(x => x.Bookings)
             .HasForeignKey(x => x.RideOfferId)

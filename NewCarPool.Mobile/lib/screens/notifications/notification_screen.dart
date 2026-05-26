@@ -4,9 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/widgets/app_design_system.dart';
+import '../../models/notification_models.dart';
 import '../../providers/notification_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../services/notification_service.dart';
+import '../../services/ride_service.dart';
+import '../rides/ride_chat_screen.dart';
+import '../rides/ride_details_screen.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key, required this.showAppBar});
@@ -70,63 +74,66 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final provider = context.watch<NotificationProvider>();
     return Scaffold(
       backgroundColor: AppDesignTokens.pageBg,
-      appBar: widget.showAppBar ? AppBar(title: const Text('Notifications')) : null,
+      appBar:
+          widget.showAppBar ? AppBar(title: const Text('Notifications')) : null,
       body: Align(
         alignment: Alignment.topCenter,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 900),
           child: RefreshIndicator(
             onRefresh: () => context.read<NotificationProvider>().loadMine(),
-            child: provider.errorMessage != null && provider.notifications.isEmpty
+            child: provider.errorMessage != null &&
+                    provider.notifications.isEmpty
                 ? AppRetryState(
                     title: 'Unable to load notifications',
                     subtitle: 'Check your internet connection and try again.',
-                    onRetry: () => context.read<NotificationProvider>().loadMine(),
+                    onRetry: () =>
+                        context.read<NotificationProvider>().loadMine(),
                   )
                 : provider.isLoading && provider.notifications.isEmpty
-                ? ListView(
-                    padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-                    children: const [
-                      AppSkeletonBox(height: 84, radius: 18),
-                      SizedBox(height: 10),
-                      AppSkeletonBox(height: 96, radius: 18),
-                      SizedBox(height: 10),
-                      AppSkeletonBox(height: 96, radius: 18),
-                    ],
-                  )
-                : provider.notifications.isEmpty
                     ? ListView(
-                        children: [
-                          const SizedBox(height: 130),
-                          Icon(Icons.notifications_none, size: 56, color: Colors.grey.shade400),
-                          const SizedBox(height: 10),
-                          const Center(child: Text('No notifications yet.')),
+                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                        children: const [
+                          AppSkeletonBox(height: 84, radius: 18),
+                          SizedBox(height: 10),
+                          AppSkeletonBox(height: 96, radius: 18),
+                          SizedBox(height: 10),
+                          AppSkeletonBox(height: 96, radius: 18),
                         ],
                       )
-                    : ListView(
-                        padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-                        children: [
-                          const AppGradientHeroCard(
-                            title: 'Notifications',
-                            subtitle: 'Ride requests, bookings and updates',
-                            icon: Icons.notifications_active_outlined,
-                          ),
-                          const SizedBox(height: 10),
-                          ...provider.notifications.map(
-                            (item) => Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: _NotificationCard(
-                                title: item.title,
-                                message: item.message,
-                                isRead: item.isRead,
-                                onMarkRead: item.isRead
-                                    ? null
-                                    : () => context.read<NotificationProvider>().markRead(item.id),
+                    : provider.notifications.isEmpty
+                        ? ListView(
+                            children: [
+                              const SizedBox(height: 130),
+                              Icon(Icons.notifications_none,
+                                  size: 56, color: Colors.grey.shade400),
+                              const SizedBox(height: 10),
+                              const Center(
+                                  child: Text('No notifications yet.')),
+                            ],
+                          )
+                        : ListView(
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                            children: [
+                              const AppGradientHeroCard(
+                                title: 'Notifications',
+                                subtitle: 'Ride requests, bookings and updates',
+                                icon: Icons.notifications_active_outlined,
                               ),
-                            ),
+                              const SizedBox(height: 10),
+                              ...provider.notifications.map(
+                                (item) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 10),
+                                  child: _NotificationCard(
+                                    item: item,
+                                    onMarkRead: item.isRead
+                                        ? null
+                                        : () => context.read<NotificationProvider>().markRead(item.id),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
           ),
         ),
       ),
@@ -136,44 +143,92 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
 class _NotificationCard extends StatelessWidget {
   const _NotificationCard({
-    required this.title,
-    required this.message,
-    required this.isRead,
+    required this.item,
     this.onMarkRead,
   });
 
-  final String title;
-  final String message;
-  final bool isRead;
+  final AppNotification item;
   final VoidCallback? onMarkRead;
 
   @override
   Widget build(BuildContext context) {
     IconData icon = Icons.notifications_outlined;
-    if (title.toLowerCase().contains('request')) icon = Icons.group_add_outlined;
-    if (title.toLowerCase().contains('cancel')) icon = Icons.cancel_outlined;
-    if (title.toLowerCase().contains('confirm')) icon = Icons.check_circle_outline;
+    if (item.title.toLowerCase().contains('request')) {
+      icon = Icons.group_add_outlined;
+    }
+    if (item.title.toLowerCase().contains('cancel')) {
+      icon = Icons.cancel_outlined;
+    }
+    if (item.title.toLowerCase().contains('confirm')) {
+      icon = Icons.check_circle_outline;
+    }
 
     return Card(
-      color: isRead ? Colors.white : const Color(0xFFEFF1FF),
-      child: ListTile(
-        leading: Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: AppDesignTokens.brandStart.withOpacity(0.12),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: Icon(icon, color: AppDesignTokens.brandStart),
-        ),
-        title: Text(title),
-        subtitle: Text(message),
-        trailing: onMarkRead == null
-            ? null
-            : TextButton(
-                onPressed: onMarkRead,
-                child: const Text('Mark read'),
+      color: item.isRead ? Colors.white : const Color(0xFFEFF1FF),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppDesignTokens.brandStart.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(icon, color: AppDesignTokens.brandStart),
               ),
+              title: Text(item.title),
+              subtitle: Text(item.message),
+              trailing: onMarkRead == null
+                  ? null
+                  : TextButton(
+                      onPressed: onMarkRead,
+                      child: const Text('Mark read'),
+                    ),
+            ),
+            if (item.rideId != null && item.rideId!.isNotEmpty)
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final provider = context.read<NotificationProvider>();
+                      if (!item.isRead) {
+                        await provider.markRead(item.id);
+                      }
+                      final ride = await context.read<RideService>().details(item.rideId!);
+                      if (!context.mounted) return;
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride)),
+                      );
+                    },
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('View Booking'),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      final provider = context.read<NotificationProvider>();
+                      if (!item.isRead) {
+                        await provider.markRead(item.id);
+                      }
+                      final ride = await context.read<RideService>().details(item.rideId!);
+                      if (!context.mounted) return;
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride)),
+                      );
+                    },
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    label: const Text('Open Chat'),
+                  ),
+                ],
+              ),
+          ],
+        ),
       ),
     );
   }

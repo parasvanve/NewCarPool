@@ -12,6 +12,7 @@ public sealed class NotificationConfiguration : IEntityTypeConfiguration<Notific
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Title).HasMaxLength(120).IsRequired();
         builder.Property(x => x.Message).HasMaxLength(1000).IsRequired();
+        builder.Property(x => x.Type).HasConversion<int>();
         builder.HasIndex(x => new { x.UserId, x.IsRead, x.CreatedAtUtc });
         builder.HasOne(x => x.User)
             .WithMany(x => x.Notifications)

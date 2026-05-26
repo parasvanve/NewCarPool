@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using NewCarPool.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using NewCarPool.Infrastructure.Data;
 namespace NewCarPool.Infrastructure.Migrations
 {
     [DbContext(typeof(NewCarPoolDbContext))]
-    partial class NewCarPoolDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260526123151_AddPassengerPickupDropToRideBookings")]
+    partial class AddPassengerPickupDropToRideBookings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -26,9 +29,6 @@ namespace NewCarPool.Infrastructure.Migrations
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid?>("BookingId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<DateTime>("CreatedAtUtc")
@@ -45,16 +45,10 @@ namespace NewCarPool.Infrastructure.Migrations
                     b.Property<DateTime?>("ReadAtUtc")
                         .HasColumnType("datetime2");
 
-                    b.Property<Guid?>("RideId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("nvarchar(120)");
-
-                    b.Property<int>("Type")
-                        .HasColumnType("int");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uniqueidentifier");

@@ -11,6 +11,7 @@ class NotificationProvider extends ChangeNotifier {
   List<AppNotification> notifications = [];
   bool isLoading = false;
   String? errorMessage;
+  int unreadCountValue = 0;
 
   Future<void> loadMine() async {
     isLoading = true;
@@ -18,6 +19,7 @@ class NotificationProvider extends ChangeNotifier {
     notifyListeners();
     try {
       notifications = await _notificationService.getMine();
+      unreadCountValue = notifications.where((x) => !x.isRead).length;
     } catch (error) {
       errorMessage = error.toString();
       rethrow;
@@ -29,6 +31,7 @@ class NotificationProvider extends ChangeNotifier {
 
   void prependRealtime(AppNotification notification) {
     notifications = [notification, ...notifications];
+    unreadCountValue += notification.isRead ? 0 : 1;
     notifyListeners();
   }
 
@@ -41,10 +44,21 @@ class NotificationProvider extends ChangeNotifier {
         id: current.id,
         title: current.title,
         message: current.message,
+        typeCode: current.typeCode,
+        rideId: current.rideId,
+        bookingId: current.bookingId,
         isRead: true,
         createdAtUtc: current.createdAtUtc,
       );
+      unreadCountValue = notifications.where((x) => !x.isRead).length;
       notifyListeners();
     }
+  }
+
+  Future<void> loadUnreadCount() async {
+    try {
+      unreadCountValue = await _notificationService.unreadCount();
+      notifyListeners();
+    } catch (_) {}
   }
 }

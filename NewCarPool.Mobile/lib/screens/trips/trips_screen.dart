@@ -1,8 +1,10 @@
-﻿import 'package:dio/dio.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/constants/app_routes.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/widgets/app_design_system.dart';
 import '../../models/booking_models.dart';
@@ -128,14 +130,8 @@ class _TripsScreenState extends State<TripsScreen> {
                               onBookRide: (ride) async {
                                 setState(() => _bookingRideId = ride.id);
                                 try {
-                                  await context.read<BookingProvider>().request(
-                                      rideOfferId: ride.id, seatsBooked: 1);
+                                  await context.push(AppRoutes.booking, extra: ride);
                                   if (!mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content:
-                                            Text('Ride booked successfully')),
-                                  );
                                   await _refreshAll();
                                 } on DioException catch (error) {
                                   if (!mounted) return;
@@ -300,6 +296,8 @@ class _BookedTab extends StatelessWidget {
             statusBadge: 'Booked',
             bookingMeta:
                 'Booking ID: ${booking.id.substring(0, booking.id.length > 8 ? 8 : booking.id.length)}  •  ${booking.seatsBooked} seat(s)',
+            pickupMeta: booking.passengerPickup?.name,
+            dropMeta: booking.passengerDrop?.name,
             primaryLabel: 'View Details',
             secondaryLabel: 'Chat with Driver',
             onPrimary: () => Navigator.of(context).push(MaterialPageRoute(
@@ -367,6 +365,8 @@ class _RideCard extends StatelessWidget {
     this.onDanger,
     this.primaryBusy = false,
     this.bookingMeta,
+    this.pickupMeta,
+    this.dropMeta,
   });
 
   final RideOffer ride;
@@ -381,6 +381,8 @@ class _RideCard extends StatelessWidget {
   final VoidCallback? onDanger;
   final bool primaryBusy;
   final String? bookingMeta;
+  final String? pickupMeta;
+  final String? dropMeta;
 
   @override
   Widget build(BuildContext context) {
@@ -395,7 +397,7 @@ class _RideCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '${ride.origin.name} → ${ride.destination.name}',
+                    '${ride.origin.name} ? ${ride.destination.name}',
                     style: const TextStyle(
                         fontWeight: FontWeight.w700, fontSize: 18),
                     maxLines: 2,
@@ -432,7 +434,7 @@ class _RideCard extends StatelessWidget {
                 'Driver: ${ride.driverName.isEmpty ? 'Driver' : ride.driverName}'),
             const SizedBox(height: 4),
             Text(
-                '₹${ride.pricePerSeat} / seat • ${ride.availableSeats} seats left'),
+                '?${ride.pricePerSeat} / seat • ${ride.availableSeats} seats left'),
             const SizedBox(height: 4),
             Text('${ride.vehicleName ?? 'Vehicle'} ${ride.vehicleNumber ?? ''}'
                 .trim()),
@@ -440,6 +442,14 @@ class _RideCard extends StatelessWidget {
               const SizedBox(height: 4),
               Text(bookingMeta!,
                   style: const TextStyle(fontWeight: FontWeight.w600)),
+            ],
+            if ((pickupMeta ?? '').isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text('Pickup: $pickupMeta'),
+            ],
+            if ((dropMeta ?? '').isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text('Drop: $dropMeta'),
             ],
             const SizedBox(height: 10),
             Wrap(
@@ -520,3 +530,4 @@ class _TripFilterChip extends StatelessWidget {
         label: Text(label), selected: selected, onSelected: (_) => onTap());
   }
 }
+

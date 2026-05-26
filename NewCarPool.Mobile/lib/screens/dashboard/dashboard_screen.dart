@@ -7,12 +7,12 @@ import '../../core/constants/app_routes.dart';
 import '../../core/widgets/app_design_system.dart';
 import '../../models/ride_models.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/ride_provider.dart';
 import '../notifications/notification_screen.dart';
 import '../profile/profile_screen.dart';
 import '../rides/offer_ride_form_screen.dart';
-import '../rides/search_ride_form_screen.dart';
 import '../trips/trips_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -30,6 +30,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RideProvider>().loadUpcomingActive();
+      context.read<NotificationProvider>().loadUnreadCount();
     });
   }
 
@@ -60,15 +61,18 @@ class _HomeTab extends StatelessWidget {
     final isWide = MediaQuery.of(context).size.width > 900;
     final auth = context.watch<AuthProvider>();
     final profile = context.watch<ProfileProvider>().profile;
-    final rides = context.watch<RideProvider>().rides;
+    final rides = context.select<RideProvider, List<RideOffer>>(
+      (provider) => provider.upcomingActiveRides,
+    );
     final displayName =
         (profile?.fullName ?? auth.session?.fullName ?? '').trim();
     final firstName =
         displayName.isEmpty ? 'there' : displayName.split(' ').first;
-    final upcomingRide = rides
-        .where((r) => r.departureTimeUtc.isAfter(DateTime.now().toUtc()))
-        .toList()
+    final myUserId = auth.session?.userId;
+    final unreadCount = context.watch<NotificationProvider>().unreadCountValue;
+    final upcomingRides = List<RideOffer>.from(rides)
       ..sort((a, b) => a.departureTimeUtc.compareTo(b.departureTimeUtc));
+    final previewRides = upcomingRides.take(3).toList();
 
     final quickActions = Wrap(
       spacing: 10,
@@ -130,17 +134,6 @@ class _HomeTab extends StatelessWidget {
               text: 'Destination',
             ),
             const SizedBox(height: 14),
-            FilledButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const SearchRideFormScreen(),
-                ),
-              ),
-              icon: const Icon(Icons.search),
-              label: const Text('Search Ride'),
-            ),
-            const SizedBox(height: 8),
             OutlinedButton.icon(
               onPressed: () => Navigator.push(
                 context,
@@ -174,14 +167,32 @@ class _HomeTab extends StatelessWidget {
     final tripsColumn = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        FilledButton.icon(
+          onPressed: () => context.push(AppRoutes.searchRides),
+          icon: const Icon(Icons.search),
+          label: const Text('Search Ride'),
+        ),
+        const SizedBox(height: 14),
         AppSectionHeader(
           title: 'Upcoming Ride',
           actionText: 'View all',
           onAction: () => context.push(AppRoutes.trips),
         ),
         const SizedBox(height: 8),
-        _TripPreviewCard(
-            ride: upcomingRide.isEmpty ? null : upcomingRide.first),
+        if (previewRides.isEmpty)
+          const _TripPreviewCard()
+        else
+          ...previewRides.map(
+            (ride) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _TripPreviewCard(
+                ride: ride,
+                canBook: myUserId == null
+                    ? ride.availableSeats > 0
+                    : (ride.driverId != myUserId && ride.availableSeats > 0),
+              ),
+            ),
+          ),
         const SizedBox(height: 16),
         const AppSectionHeader(title: 'Recent Searches'),
         const SizedBox(height: 8),
@@ -200,7 +211,30 @@ class _HomeTab extends StatelessWidget {
           actions: [
             IconButton(
               onPressed: () => context.push(AppRoutes.notifications),
-              icon: const Icon(Icons.notifications_none_rounded),
+              icon: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Icon(Icons.notifications_none_rounded),
+                  if (unreadCount > 0)
+                    Positioned(
+                      right: -2,
+                      top: -2,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        constraints: const BoxConstraints(minWidth: 16),
+                        child: Text(
+                          unreadCount > 99 ? '99+' : '$unreadCount',
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
@@ -254,9 +288,10 @@ class _RouteRow extends StatelessWidget {
 }
 
 class _TripPreviewCard extends StatelessWidget {
-  const _TripPreviewCard({this.ride});
+  const _TripPreviewCard({this.ride, this.canBook = false});
 
   final RideOffer? ride;
+  final bool canBook;
 
   @override
   Widget build(BuildContext context) {
@@ -269,7 +304,7 @@ class _TripPreviewCard extends StatelessWidget {
             Text(
               ride == null
                   ? 'No upcoming rides yet'
-                  : '${ride!.origin.name}  →  ${ride!.destination.name}',
+                  : '${ride!.origin.name}  ->  ${ride!.destination.name}',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -284,13 +319,35 @@ class _TripPreviewCard extends StatelessWidget {
             Text(ride == null
                 ? 'Driver details appear after booking.'
                 : 'Driver: ${ride!.driverName}'),
+            if (ride != null) ...[
+              const SizedBox(height: 4),
+              Text('Seats: ${ride!.availableSeats} • ₹${ride!.pricePerSeat} / seat'),
+              const SizedBox(height: 4),
+              Text(
+                'Vehicle: ${ride!.vehicleName ?? 'Vehicle'} ${ride!.vehicleNumber ?? ''}'
+                    .trim(),
+              ),
+            ],
             const SizedBox(height: 10),
             Align(
               alignment: Alignment.centerRight,
-              child: FilledButton.tonal(
-                onPressed: null,
-                child: Text(ride == null ? 'Empty' : 'Upcoming'),
-              ),
+              child: ride == null
+                  ? const FilledButton.tonal(
+                      onPressed: null,
+                      child: Text('Empty'),
+                    )
+                  : canBook
+                      ? FilledButton.tonal(
+                          onPressed: () => context.push(
+                            AppRoutes.rideDetails,
+                            extra: ride,
+                          ),
+                          child: const Text('Book Ride'),
+                        )
+                      : const FilledButton.tonal(
+                          onPressed: null,
+                          child: Text('Upcoming'),
+                        ),
             ),
           ],
         ),

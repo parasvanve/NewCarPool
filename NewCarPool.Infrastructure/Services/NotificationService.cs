@@ -21,6 +21,9 @@ public sealed class NotificationService : INotificationService
     public async Task<IReadOnlyList<NotificationDto>> GetMineAsync(Guid userId, CancellationToken cancellationToken) =>
         await _notifications.Query().Where(x => x.UserId == userId).OrderByDescending(x => x.CreatedAtUtc).Select(x => Map(x)).ToListAsync(cancellationToken);
 
+    public Task<int> UnreadCountAsync(Guid userId, CancellationToken cancellationToken) =>
+        _notifications.Query().CountAsync(x => x.UserId == userId && !x.IsRead, cancellationToken);
+
     public async Task<NotificationDto> CreateAsync(Guid userId, CreateNotificationRequest request, CancellationToken cancellationToken)
     {
         var notification = new Notification
@@ -28,7 +31,10 @@ public sealed class NotificationService : INotificationService
             Id = Guid.NewGuid(),
             UserId = userId,
             Title = request.Title.Trim(),
-            Message = request.Message.Trim()
+            Message = request.Message.Trim(),
+            Type = request.Type,
+            RideId = request.RideId,
+            BookingId = request.BookingId
         };
         await _notifications.AddAsync(notification, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -49,5 +55,13 @@ public sealed class NotificationService : INotificationService
     }
 
     private static NotificationDto Map(Notification notification) =>
-        new(notification.Id, notification.Title, notification.Message, notification.IsRead, notification.CreatedAtUtc);
+        new(
+            notification.Id,
+            notification.Title,
+            notification.Message,
+            notification.Type,
+            notification.RideId,
+            notification.BookingId,
+            notification.IsRead,
+            notification.CreatedAtUtc);
 }

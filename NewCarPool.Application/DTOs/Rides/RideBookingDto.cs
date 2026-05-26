@@ -8,5 +8,7 @@ public sealed record RideBookingDto(
     Guid PassengerId,
     string PassengerName,
     int SeatsBooked,
+    GeoPointDto PassengerPickup,
+    GeoPointDto PassengerDrop,
     BookingStatus Status,
     DateTime CreatedAtUtc);

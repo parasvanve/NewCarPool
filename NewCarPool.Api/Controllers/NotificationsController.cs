@@ -26,6 +26,10 @@ public sealed class NotificationsController : ControllerBase
     public async Task<ActionResult<IReadOnlyList<NotificationDto>>> Mine(CancellationToken cancellationToken) =>
         Ok(await _notificationService.GetMineAsync(User.GetUserId(), cancellationToken));
 
+    [HttpGet("unread-count")]
+    public async Task<ActionResult<int>> UnreadCount(CancellationToken cancellationToken) =>
+        Ok(await _notificationService.UnreadCountAsync(User.GetUserId(), cancellationToken));
+
     [HttpPost]
     public async Task<ActionResult<NotificationDto>> SendToMe(CreateNotificationRequest request, CancellationToken cancellationToken)
     {

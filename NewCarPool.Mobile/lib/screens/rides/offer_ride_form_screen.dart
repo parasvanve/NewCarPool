@@ -324,7 +324,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
             vehicleNumber: v.vehicleNumber,
           );
       if (!mounted) return;
-      context.read<RideProvider>().loadUpcomingActive().catchError((_) {});
+      await context.read<RideProvider>().loadUpcomingActive();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Ride created successfully')),
       );

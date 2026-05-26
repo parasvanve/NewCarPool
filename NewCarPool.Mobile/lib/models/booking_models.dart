@@ -1,3 +1,5 @@
+import 'ride_models.dart';
+
 enum BookingStatus {
   pending(1, 'Pending'),
   accepted(2, 'Booked'),
@@ -30,6 +32,8 @@ class RideBooking {
     required this.seatsBooked,
     required this.status,
     required this.createdAtUtc,
+    this.passengerPickup,
+    this.passengerDrop,
   });
 
   final String id;
@@ -39,6 +43,8 @@ class RideBooking {
   final int seatsBooked;
   final int status;
   final DateTime createdAtUtc;
+  final GeoPoint? passengerPickup;
+  final GeoPoint? passengerDrop;
   BookingStatus get bookingStatus => BookingStatus.fromCode(status);
 
   factory RideBooking.fromJson(Map<String, dynamic> json) => RideBooking(
@@ -49,5 +55,53 @@ class RideBooking {
         seatsBooked: (json['seatsBooked'] as num?)?.toInt() ?? 0,
         status: (json['status'] as num?)?.toInt() ?? 0,
         createdAtUtc: DateTime.tryParse(json['createdAtUtc']?.toString() ?? '') ?? DateTime.now().toUtc(),
+        passengerPickup: _pointFromJson(
+          raw: json['passengerPickup'] ?? json['pickup'],
+          name: json['passengerPickupName'],
+          address: json['passengerPickupAddress'],
+          latitude: json['passengerPickupLatitude'],
+          longitude: json['passengerPickupLongitude'],
+        ),
+        passengerDrop: _pointFromJson(
+          raw: json['passengerDrop'] ?? json['drop'],
+          name: json['passengerDropName'],
+          address: json['passengerDropAddress'],
+          latitude: json['passengerDropLatitude'],
+          longitude: json['passengerDropLongitude'],
+        ),
       );
+
+  static GeoPoint? _pointFromJson({
+    required dynamic raw,
+    required dynamic name,
+    required dynamic address,
+    required dynamic latitude,
+    required dynamic longitude,
+  }) {
+    if (raw is Map) {
+      final map = Map<String, dynamic>.from(raw);
+      if (map['latitude'] != null && map['longitude'] != null) {
+        return GeoPoint(
+          name: map['name']?.toString() ?? 'Point',
+          address: map['address']?.toString(),
+          latitude: (map['latitude'] as num).toDouble(),
+          longitude: (map['longitude'] as num).toDouble(),
+        );
+      }
+    }
+
+    if (latitude != null && longitude != null) {
+      final latNum = latitude is num ? latitude : num.tryParse(latitude.toString());
+      final lngNum = longitude is num ? longitude : num.tryParse(longitude.toString());
+      if (latNum != null && lngNum != null) {
+        return GeoPoint(
+          name: name?.toString() ?? 'Point',
+          address: address?.toString(),
+          latitude: latNum.toDouble(),
+          longitude: lngNum.toDouble(),
+        );
+      }
+    }
+    return null;
+  }
 }

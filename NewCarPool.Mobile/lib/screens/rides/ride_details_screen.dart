@@ -286,11 +286,55 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                       style: TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   ..._participants.map(
-                    (p) => ListTile(
-                      dense: true,
-                      leading: const Icon(Icons.person_outline),
-                      title: Text(p.passengerName),
-                      trailing: Text('${p.seatsBooked} seat'),
+                    (p) => Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(Icons.person_outline),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    p.passengerName,
+                                    style: const TextStyle(fontWeight: FontWeight.w700),
+                                  ),
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text('${p.seatsBooked} seat'),
+                                    const SizedBox(height: 2),
+                                    const Text('Booked', style: TextStyle(fontSize: 12, color: Colors.green)),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            if (p.passengerPickup != null) ...[
+                              const SizedBox(height: 6),
+                              Text('Pickup: ${p.passengerPickup!.name}'),
+                            ],
+                            if (p.passengerDrop != null) ...[
+                              const SizedBox(height: 2),
+                              Text('Drop: ${p.passengerDrop!.name}'),
+                            ],
+                            const SizedBox(height: 8),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: OutlinedButton.icon(
+                                onPressed: () => Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride)),
+                                ),
+                                icon: const Icon(Icons.chat_bubble_outline),
+                                label: const Text('Chat'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 ],

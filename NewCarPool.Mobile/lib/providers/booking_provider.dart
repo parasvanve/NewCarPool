@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/booking_models.dart';
+import '../models/ride_models.dart';
 import '../services/booking_service.dart';
 
 class BookingProvider extends ChangeNotifier {
@@ -36,14 +37,14 @@ class BookingProvider extends ChangeNotifier {
   Future<RideBooking> request({
     required String rideOfferId,
     required int seatsBooked,
-    String? boardingPoint,
-    String? dropPoint,
+    GeoPoint? pickup,
+    GeoPoint? drop,
   }) async {
     final booking = await _bookingService.request(
       rideOfferId: rideOfferId,
       seatsBooked: seatsBooked,
-      boardingPoint: boardingPoint,
-      dropPoint: dropPoint,
+      pickup: pickup,
+      drop: drop,
     );
     bookings = [booking, ...bookings.where((x) => x.id != booking.id)];
     notifyListeners();

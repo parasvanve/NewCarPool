@@ -32,6 +32,16 @@ class NotificationService {
     await _apiClient.dio.post('/notifications/$notificationId/read');
   }
 
+  Future<int> unreadCount() async {
+    final response = await _apiClient.dio.get('/notifications/unread-count');
+    final value = response.data;
+    if (value is num) return value.toInt();
+    if (value is Map<String, dynamic>) {
+      return (value['count'] as num?)?.toInt() ?? 0;
+    }
+    return 0;
+  }
+
   Future<void> connect(String userId, void Function(AppNotification) onNotification) async {
     final token = await _tokenStore.accessToken;
     if (token == null) return;

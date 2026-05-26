@@ -1,5 +1,6 @@
 import '../core/network/api_client.dart';
 import '../models/booking_models.dart';
+import '../models/ride_models.dart';
 
 class BookingService {
   BookingService(this._apiClient);
@@ -32,14 +33,16 @@ class BookingService {
   Future<RideBooking> request({
     required String rideOfferId,
     required int seatsBooked,
-    String? boardingPoint,
-    String? dropPoint,
+    GeoPoint? pickup,
+    GeoPoint? drop,
   }) async {
     final response = await _apiClient.dio.post('/rides/book', data: {
       'rideOfferId': rideOfferId,
       'seatsBooked': seatsBooked,
-      if (boardingPoint != null && boardingPoint.isNotEmpty) 'boardingPoint': boardingPoint,
-      if (dropPoint != null && dropPoint.isNotEmpty) 'dropPoint': dropPoint,
+      if (pickup != null) 'pickup': pickup.toJson(),
+      if (drop != null) 'drop': drop.toJson(),
+      if (pickup != null && pickup.name.isNotEmpty) 'boardingPoint': pickup.name,
+      if (drop != null && drop.name.isNotEmpty) 'dropPoint': drop.name,
     });
     final data = response.data;
     if (data is Map<String, dynamic>) {

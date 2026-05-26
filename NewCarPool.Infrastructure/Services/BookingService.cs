@@ -87,5 +87,22 @@ public sealed class BookingService : IBookingService
         _bookings.Query().Include(x => x.Passenger).Include(x => x.RideOffer);
 
     private static RideBookingDto Map(RideBooking booking) =>
-        new(booking.Id, booking.RideOfferId, booking.PassengerId, booking.Passenger?.FullName ?? string.Empty, booking.SeatsBooked, booking.Status, booking.CreatedAtUtc);
+        new(
+            booking.Id,
+            booking.RideOfferId,
+            booking.PassengerId,
+            booking.Passenger?.FullName ?? string.Empty,
+            booking.SeatsBooked,
+            new GeoPointDto(
+                booking.PassengerPickupName,
+                booking.PassengerPickupLatitude,
+                booking.PassengerPickupLongitude,
+                booking.PassengerPickupAddress),
+            new GeoPointDto(
+                booking.PassengerDropName,
+                booking.PassengerDropLatitude,
+                booking.PassengerDropLongitude,
+                booking.PassengerDropAddress),
+            booking.Status,
+            booking.CreatedAtUtc);
 }
