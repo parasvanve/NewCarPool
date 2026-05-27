@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../../core/utils/location_display_formatter.dart';
+import '../../core/utils/departure_time_utils.dart';
 
 import '../../core/widgets/app_design_system.dart';
 import '../../models/ride_models.dart';
@@ -245,8 +246,10 @@ class _RideCard extends StatelessWidget {
                                 const TextStyle(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 2),
                         Text(
-                            DateFormat('dd MMM, hh:mm a')
-                                .format(ride.departureTimeUtc.toLocal()),
+                            DepartureTimeUtils.formatFriendly(
+                              ride.departureTimeUtc,
+                              context: 'Ride Results',
+                            ),
                             style: Theme.of(context).textTheme.bodySmall),
                       ],
                     ),
@@ -265,7 +268,7 @@ class _RideCard extends StatelessWidget {
                 decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(12)),
-                child: Text('${ride.origin.name} -> ${ride.destination.name}',
+                child: Text(LocationDisplayFormatter.routeTitle(ride.origin, ride.destination),
                     maxLines: 2, overflow: TextOverflow.ellipsis),
               ),
               if (ride.intermediateStops.isNotEmpty) ...[

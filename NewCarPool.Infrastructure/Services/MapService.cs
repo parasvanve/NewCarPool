@@ -70,7 +70,12 @@ public sealed class MapService : IMapService
             .Select(x => new GeocodeResultDto(
                 x.GetProperty("display_name").GetString() ?? string.Empty,
                 double.Parse(x.GetProperty("lat").GetString() ?? "0", CultureInfo.InvariantCulture),
-                double.Parse(x.GetProperty("lon").GetString() ?? "0", CultureInfo.InvariantCulture)))
+                double.Parse(x.GetProperty("lon").GetString() ?? "0", CultureInfo.InvariantCulture),
+                x.TryGetProperty("name", out var nameNode) ? nameNode.GetString() : null,
+                x.GetProperty("display_name").GetString(),
+                x.TryGetProperty("place_id", out var placeIdNode) ? placeIdNode.GetInt64() : null,
+                GetMainText(x.GetProperty("display_name").GetString() ?? string.Empty),
+                GetSecondaryText(x.GetProperty("display_name").GetString() ?? string.Empty)))
             .ToList() ?? [];
     }
 
@@ -83,7 +88,23 @@ public sealed class MapService : IMapService
         var displayName = response.TryGetProperty("display_name", out var display)
             ? display.GetString() ?? "Current location"
             : "Current location";
-        return new ReverseGeocodeResultDto(displayName, latitude, longitude);
+        var name = response.TryGetProperty("name", out var nameNode) ? nameNode.GetString() : null;
+        return new ReverseGeocodeResultDto(displayName, latitude, longitude, name, displayName);
+    }
+
+    private static string GetMainText(string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(displayName)) return string.Empty;
+        var parts = displayName.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return parts.Length == 0 ? displayName.Trim() : parts[0];
+    }
+
+    private static string GetSecondaryText(string displayName)
+    {
+        if (string.IsNullOrWhiteSpace(displayName)) return string.Empty;
+        var parts = displayName.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length <= 1) return string.Empty;
+        return string.Join(", ", parts.Skip(1).Take(3));
     }
 
     private async Task<RouteResultDto> CalculateWithOsrmAsync(RouteRequest request, CancellationToken cancellationToken)

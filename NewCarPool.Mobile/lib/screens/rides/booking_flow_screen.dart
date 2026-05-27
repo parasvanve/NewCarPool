@@ -4,6 +4,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/errors/app_exception.dart';
+import '../../core/utils/location_display_formatter.dart';
 import '../../models/ride_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/booking_provider.dart';
@@ -63,7 +64,8 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                 final results = await context.read<MapService>().geocode(q);
                 final mapped = results
                     .take(10)
-                    .map((e) => Map<String, dynamic>.from(e as Map))
+                    .map((e) => LocationDisplayFormatter.fromSearchSuggestion(
+                        Map<String, dynamic>.from(e as Map)))
                     .toList(growable: false);
                 setInnerState(() {
                   suggestions
@@ -125,18 +127,27 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                         itemBuilder: (_, i) {
                           final item = suggestions[i];
                           return ListTile(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                             leading: const Icon(Icons.place_outlined),
                             title: Text(
-                              item['displayName']?.toString() ?? 'Place',
-                              maxLines: 2,
+                              LocationDisplayFormatter.title(item),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              LocationDisplayFormatter.subtitle(item),
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                             onTap: () {
                               Navigator.pop(
                                 context,
                                 GeoPoint(
-                                  name: item['displayName']?.toString() ?? 'Place',
-                                  address: item['displayName']?.toString(),
+                                  name: LocationDisplayFormatter.title(item),
+                                  address: item['formattedAddress']?.toString() ??
+                                      item['displayName']?.toString(),
                                   latitude: (item['latitude'] as num).toDouble(),
                                   longitude: (item['longitude'] as num).toDouble(),
                                 ),
@@ -257,7 +268,10 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '${ride.origin.name} -> ${ride.destination.name}',
+                    LocationDisplayFormatter.routeTitle(
+                      ride.origin,
+                      ride.destination,
+                    ),
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 4),
@@ -291,7 +305,16 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                         color: const Color(0xFFF8FAFC),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Text(_pickupPoint!.name),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_pickupPoint!.name),
+                          Text(
+                            LocationDisplayFormatter.compactAddress(_pickupPoint),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
                     ),
                   const SizedBox(height: 8),
                   Wrap(

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/errors/app_exception.dart';
+import '../../core/utils/location_display_formatter.dart';
 import '../../core/widgets/app_design_system.dart';
 import '../../models/ride_models.dart';
 import '../../providers/ride_provider.dart';
@@ -46,6 +47,8 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
 
   List<Map<String, dynamic>> _searchSuggestions = const [];
   List<LatLng> _routePolylinePoints = const [];
+  Map<String, dynamic>? _pickupSelection;
+  Map<String, dynamic>? _destinationSelection;
   final List<String> _recentSearches = [];
   final List<String> _savedLocations = const ['Home', 'Work', 'Airport'];
   double? _distanceKm;
@@ -96,11 +99,21 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
       );
 
       if (!mounted) return;
+      final reverse = await context.read<MapService>().reverseGeocode(
+            latitude: position.latitude,
+            longitude: position.longitude,
+          );
+      final pickupSuggestion = LocationDisplayFormatter.fromSearchSuggestion({
+        'displayName': reverse,
+        'formattedAddress': reverse,
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+      });
       setState(() {
         _pickupLatLng = LatLng(position.latitude, position.longitude);
         _centerLocation = _pickupLatLng!;
-        _pickupController.text =
-            'Current Location (${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)})';
+        _pickupSelection = pickupSuggestion;
+        _pickupController.text = pickupSuggestion['formattedAddress'].toString();
       });
 
       _moveMapSafely(_centerLocation, 14.5);
@@ -145,7 +158,8 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
 
       final suggestions = results
           .take(5)
-          .map((item) => Map<String, dynamic>.from(item as Map))
+          .map((item) => LocationDisplayFormatter.fromSearchSuggestion(
+              Map<String, dynamic>.from(item as Map)))
           .toList();
 
       setState(() {
@@ -199,13 +213,14 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
 
     setState(() {
       _dropLatLng = point;
+      _destinationSelection = suggestion;
       _destinationController.text =
-          suggestion['displayName']?.toString() ?? 'Pinned location';
+          suggestion['formattedAddress']?.toString() ?? 'Pinned location';
       _showSuggestions = false;
       _searchSuggestions = const [];
       _suppressSearchOnChanged = true;
-      _searchController.text = _destinationController.text;
-      final searched = _destinationController.text.trim();
+      _searchController.text = LocationDisplayFormatter.title(suggestion);
+      final searched = _searchController.text.trim();
       if (searched.isNotEmpty) {
         _recentSearches.remove(searched);
         _recentSearches.insert(0, searched);
@@ -377,12 +392,14 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
     setState(() => _isSubmitting = true);
     try {
       final originGeo = GeoPoint(
-        name: _pickupController.text.trim(),
+        name: LocationDisplayFormatter.title(_pickupSelection),
+        address: _pickupController.text.trim(),
         latitude: _pickupLatLng!.latitude,
         longitude: _pickupLatLng!.longitude,
       );
       final destGeo = GeoPoint(
-        name: _destinationController.text.trim(),
+        name: LocationDisplayFormatter.title(_destinationSelection),
+        address: _destinationController.text.trim(),
         latitude: _dropLatLng!.latitude,
         longitude: _dropLatLng!.longitude,
       );
@@ -398,8 +415,8 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => RideResultsScreen(
-            pickup: _pickupController.text,
-            destination: _destinationController.text,
+            pickup: LocationDisplayFormatter.title(_pickupSelection),
+            destination: LocationDisplayFormatter.title(_destinationSelection),
           ),
         ),
       );
@@ -550,12 +567,18 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
                         itemBuilder: (context, index) {
                           final suggestion = _searchSuggestions[index];
                           return ListTile(
-                            dense: true,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                             leading: const Icon(Icons.place_outlined),
                             title: Text(
-                              suggestion['displayName']?.toString() ??
-                                  'Unknown place',
-                              maxLines: 2,
+                              LocationDisplayFormatter.title(suggestion),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              LocationDisplayFormatter.subtitle(suggestion),
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                             onTap: () => _selectSuggestion(suggestion),
@@ -796,7 +819,7 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
                                           title: ride.driverName.isEmpty
                                               ? 'Ride'
                                               : ride.driverName,
-                                          snippet: '\u20B9${ride.pricePerSeat} � ${ride.availableSeats} seats',
+                                          snippet: '\u20B9${ride.pricePerSeat} • ${ride.availableSeats} seats',
                                         ),
                                       ),
                                     ),
@@ -876,6 +899,7 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
     );
   }
 }
+
 
 
 

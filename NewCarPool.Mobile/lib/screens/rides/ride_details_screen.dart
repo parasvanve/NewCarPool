@@ -6,7 +6,10 @@ import 'package:google_maps_flutter/google_maps_flutter.dart' as gmap;
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_routes.dart';
+import '../../core/utils/departure_time_utils.dart';
+import '../../core/utils/location_display_formatter.dart';
 import '../../core/widgets/app_design_system.dart';
+import '../../core/widgets/ride_timeline_widgets.dart';
 import '../../models/booking_models.dart';
 import '../../models/ride_models.dart';
 import '../../providers/auth_provider.dart';
@@ -250,8 +253,52 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
         Card(
           child: ListTile(
             leading: const Icon(Icons.route_outlined),
-            title: Text('${ride.origin.name} → ${ride.destination.name}'),
-            subtitle: Text('${ride.availableSeats} seats available'),
+            title: Text(LocationDisplayFormatter.routeTitle(ride.origin, ride.destination)),
+            subtitle: Text('${LocationDisplayFormatter.compactAddress(ride.origin)} · ${ride.availableSeats} seats available'),
+          ),
+        ),
+        Builder(
+          builder: (_) {
+            final myBooking = bookings
+                .where((b) => b.rideOfferId == ride.id)
+                .toList()
+              ..sort((a, b) => b.createdAtUtc.compareTo(a.createdAtUtc));
+            final latest = myBooking.isEmpty ? null : myBooking.first;
+            final nodes = buildRideTimeline(
+              ride: ride,
+              yourPickupName: latest?.passengerPickup == null
+                  ? null
+                  : LocationDisplayFormatter.title(latest!.passengerPickup!),
+              yourDropName: latest?.passengerDrop == null
+                  ? null
+                  : LocationDisplayFormatter.title(latest!.passengerDrop!),
+              departureUtc: ride.departureTimeUtc,
+            );
+            return Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Full Route Timeline', style: TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    RideVerticalTimeline(nodes: nodes),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.schedule_outlined),
+            title: const Text('Departure'),
+            subtitle: Text(
+              DepartureTimeUtils.formatFriendly(
+                ride.departureTimeUtc,
+                context: 'Ride Details',
+              ),
+            ),
           ),
         ),
         if (ride.intermediateStops.isNotEmpty)
@@ -315,11 +362,11 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                             ),
                             if (p.passengerPickup != null) ...[
                               const SizedBox(height: 6),
-                              Text('Pickup: ${p.passengerPickup!.name}'),
+                              Text('Your Pickup: ${LocationDisplayFormatter.title(p.passengerPickup)}'),
                             ],
                             if (p.passengerDrop != null) ...[
                               const SizedBox(height: 2),
-                              Text('Drop: ${p.passengerDrop!.name}'),
+                              Text('Your Drop: ${LocationDisplayFormatter.title(p.passengerDrop)}'),
                             ],
                             const SizedBox(height: 8),
                             Align(

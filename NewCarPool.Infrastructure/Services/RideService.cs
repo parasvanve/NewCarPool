@@ -58,7 +58,12 @@ public sealed class RideService : IRideService
                 request.IntermediateStops?.Count ?? 0);
 
             _ = await _users.GetByIdAsync(driverId, cancellationToken) ?? throw new ApiException("Driver not found.", 404);
-            ValidateRideOffer(request);
+            var departureUtc = NormalizeToUtc(request.DepartureTimeUtc);
+            _logger.LogInformation(
+                "Offer ride departure normalization. Input={InputDeparture}, NormalizedUtc={NormalizedDepartureUtc}",
+                request.DepartureTimeUtc,
+                departureUtc);
+            ValidateRideOffer(departureUtc);
             await EnsureVehicleOwnershipAsync(driverId, request.VehicleId, cancellationToken);
 
             var ride = new RideOffer
@@ -74,7 +79,7 @@ public sealed class RideService : IRideService
                 DestinationAddress = Truncate(request.Destination.Address ?? request.Destination.Name, 500),
                 DestinationLatitude = request.Destination.Latitude,
                 DestinationLongitude = request.Destination.Longitude,
-                DepartureTimeUtc = request.DepartureTimeUtc,
+                DepartureTimeUtc = departureUtc,
                 AvailableSeats = request.AvailableSeats,
                 PricePerSeat = request.PricePerSeat,
                 Notes = Truncate(request.Notes, 1000),
@@ -150,7 +155,12 @@ public sealed class RideService : IRideService
 
     public async Task<RideOfferDto> UpdateRideAsync(Guid driverId, Guid rideOfferId, CreateRideOfferRequest request, CancellationToken cancellationToken)
     {
-        ValidateRideOffer(request);
+        var departureUtc = NormalizeToUtc(request.DepartureTimeUtc);
+        _logger.LogInformation(
+            "Update ride departure normalization. Input={InputDeparture}, NormalizedUtc={NormalizedDepartureUtc}",
+            request.DepartureTimeUtc,
+            departureUtc);
+        ValidateRideOffer(departureUtc);
         await EnsureVehicleOwnershipAsync(driverId, request.VehicleId, cancellationToken);
         var ride = await _rides.GetRideByIdAsync(rideOfferId, cancellationToken) ?? throw new ApiException("Ride not found.", 404);
         if (ride.DriverId != driverId)
@@ -172,7 +182,7 @@ public sealed class RideService : IRideService
         ride.DestinationAddress = Truncate(request.Destination.Address ?? request.Destination.Name, 500);
         ride.DestinationLatitude = request.Destination.Latitude;
         ride.DestinationLongitude = request.Destination.Longitude;
-        ride.DepartureTimeUtc = request.DepartureTimeUtc;
+        ride.DepartureTimeUtc = departureUtc;
         ride.AvailableSeats = request.AvailableSeats;
         ride.PricePerSeat = request.PricePerSeat;
         ride.Notes = Truncate(request.Notes, 1000);
@@ -329,8 +339,8 @@ public sealed class RideService : IRideService
             }
 
             var notificationMessage =
-                $"{passenger.FullName} booked your ride from {ride.OriginName} to {ride.DestinationName}. " +
-                $"Pickup: {booking.PassengerPickupName}. Drop: {booking.PassengerDropName}. Seats: {booking.SeatsBooked}.";
+                $"{passenger.FullName} booked your ride from {ShortLocationName(ride.OriginName)} to {ShortLocationName(ride.DestinationName)}. " +
+                $"Pickup: {ShortLocationName(booking.PassengerPickupName)}. Drop: {ShortLocationName(booking.PassengerDropName)}. Seats: {booking.SeatsBooked}.";
             _dbContext.Notifications.Add(new Notification
             {
                 Id = Guid.NewGuid(),
@@ -443,6 +453,14 @@ public sealed class RideService : IRideService
         return MapRide(ride);
     }
 
+    private static void ValidateRideOffer(DateTime departureTimeUtc)
+    {
+        if (departureTimeUtc <= DateTime.UtcNow)
+        {
+            throw new ApiException("Departure time must be in the future.");
+        }
+    }
+
     private static void ValidateRideOffer(CreateRideOfferRequest request)
     {
         if (request.Origin.Latitude is < -90 or > 90 || request.Origin.Longitude is < -180 or > 180)
@@ -470,10 +488,7 @@ public sealed class RideService : IRideService
             throw new ApiException("Price per seat cannot be negative.");
         }
 
-        if (request.DepartureTimeUtc <= DateTime.UtcNow)
-        {
-            throw new ApiException("Departure time must be in the future.");
-        }
+        ValidateRideOffer(NormalizeToUtc(request.DepartureTimeUtc));
     }
 
     private static void ValidateBookingPoint(GeoPointDto point, string label)
@@ -520,7 +535,7 @@ public sealed class RideService : IRideService
                 .OrderBy(x => x.StopOrder)
                 .Select(x => new RideStopDto(x.Name, x.Address, x.Latitude, x.Longitude, x.StopOrder))
                 .ToList(),
-            ride.DepartureTimeUtc,
+            NormalizeToUtc(ride.DepartureTimeUtc),
             ride.AvailableSeats,
             ride.Bookings.Count(x => x.Status == BookingStatus.Confirmed),
             ride.PricePerSeat,
@@ -531,6 +546,15 @@ public sealed class RideService : IRideService
             ride.DistanceKm,
             ride.EtaMinutes,
             ride.Status);
+
+    private static DateTime NormalizeToUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            DateTimeKind.Unspecified => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+            _ => value.ToUniversalTime()
+        };
 
     private async Task<RideChatGroup> EnsureRideChatGroupAsync(Guid rideOfferId, CancellationToken cancellationToken)
     {
@@ -597,5 +621,13 @@ public sealed class RideService : IRideService
         var text = value?.Trim() ?? string.Empty;
         if (text.Length <= maxLength) return text;
         return text[..maxLength];
+    }
+
+    private static string ShortLocationName(string? value)
+    {
+        var text = value?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(text)) return "Location";
+        var comma = text.IndexOf(',');
+        return comma > 0 ? text[..comma].Trim() : text;
     }
 }

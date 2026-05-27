@@ -8,6 +8,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_routes.dart';
+import '../../core/utils/location_display_formatter.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/widgets/app_design_system.dart';
 import '../../models/ride_models.dart';
@@ -43,6 +44,8 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
   bool _isSubmitting = false;
   Timer? _searchDebounce;
   String? _destinationAddress;
+  Map<String, dynamic>? _pickupSelection;
+  Map<String, dynamic>? _destinationSelection;
 
   @override
   void initState() {
@@ -55,6 +58,12 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
       if (route.pickup != null) {
         _center = route.pickup!;
         _pickupCtrl.text = route.pickupAddress;
+        _pickupSelection = LocationDisplayFormatter.fromSearchSuggestion({
+          'displayName': route.pickupAddress,
+          'formattedAddress': route.pickupAddress,
+          'latitude': route.pickup!.latitude,
+          'longitude': route.pickup!.longitude,
+        });
         _moveMap(route.pickup!, 14.3);
       }
     });
@@ -110,7 +119,12 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
               });
               try {
                 final results = await context.read<MapService>().geocode(q);
-                final mapped = results.take(8).map((e) => Map<String, dynamic>.from(e as Map)).toList(growable: false);
+                final mapped = results
+                    .take(8)
+                    .map((e) => LocationDisplayFormatter.fromSearchSuggestion(
+                          Map<String, dynamic>.from(e as Map),
+                        ))
+                    .toList(growable: false);
                 setInner(() {
                   localSuggestions
                     ..clear()
@@ -177,8 +191,20 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                         itemBuilder: (_, i) {
                           final s = localSuggestions[i];
                           return ListTile(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                             leading: const Icon(Icons.place_outlined),
-                            title: Text(s['displayName']?.toString() ?? 'Place', maxLines: 2, overflow: TextOverflow.ellipsis),
+                            title: Text(
+                              LocationDisplayFormatter.title(s),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: Text(
+                              LocationDisplayFormatter.subtitle(s),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
                             onTap: () => Navigator.pop(context, s),
                           );
                         },
@@ -199,7 +225,9 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
     final point = LatLng((selected['latitude'] as num).toDouble(), (selected['longitude'] as num).toDouble());
     final route = context.read<OfferRideProvider>();
     await route.setPickup(point);
-    _pickupCtrl.text = selected['displayName']?.toString() ?? route.pickupAddress;
+    _pickupSelection = selected;
+    _pickupCtrl.text =
+        selected['formattedAddress']?.toString() ?? route.pickupAddress;
     _moveMap(point, 14.3);
   }
 
@@ -209,7 +237,8 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
     final point = LatLng((selected['latitude'] as num).toDouble(), (selected['longitude'] as num).toDouble());
     final route = context.read<OfferRideProvider>();
     await route.setDestination(point);
-    _destCtrl.text = selected['displayName']?.toString() ?? 'Destination';
+    _destinationSelection = selected;
+    _destCtrl.text = selected['formattedAddress']?.toString() ?? 'Destination';
     _destinationAddress = _destCtrl.text;
     _moveMap(point, 14.3);
   }
@@ -219,8 +248,9 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
     if (selected == null) return;
     final route = context.read<OfferRideProvider>();
     final point = LatLng((selected['latitude'] as num).toDouble(), (selected['longitude'] as num).toDouble());
-    final name = selected['displayName']?.toString() ?? 'Stop';
-    final stop = RideStop(name: name, address: name, latitude: point.latitude, longitude: point.longitude, order: (index ?? route.stops.length) + 1);
+    final name = LocationDisplayFormatter.title(selected);
+    final address = selected['formattedAddress']?.toString() ?? name;
+    final stop = RideStop(name: name, address: address, latitude: point.latitude, longitude: point.longitude, order: (index ?? route.stops.length) + 1);
     final message = index == null ? await route.addStop(stop) : await route.updateStop(index, stop);
     if (message != null) _showInlineWarning(message);
   }
@@ -302,7 +332,20 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
       return;
     }
     final v = vehicles.firstWhere((x) => x.id == vId);
-    final departure = DateTime(_date!.year, _date!.month, _date!.day, _time!.hour, _time!.minute).toUtc();
+    final selectedLocalDeparture = DateTime(
+      _date!.year,
+      _date!.month,
+      _date!.day,
+      _time!.hour,
+      _time!.minute,
+    );
+    final departure = selectedLocalDeparture.toUtc();
+    debugPrint(
+      '[DepartureTime][SELECTED_LOCAL] local=${selectedLocalDeparture.toIso8601String()}',
+    );
+    debugPrint(
+      '[DepartureTime][SEND_UTC] utc=${departure.toIso8601String()}',
+    );
     final price = double.tryParse(_priceCtrl.text.trim());
     if (price == null || price <= 0) {
       _showInlineWarning('Enter valid price');
@@ -313,8 +356,18 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
     try {
       await context.read<RideProvider>().offerRide(
             vehicleId: v.id,
-            origin: GeoPoint(name: _pickupCtrl.text.trim(), address: _pickupCtrl.text.trim(), latitude: route.pickup!.latitude, longitude: route.pickup!.longitude),
-            destination: GeoPoint(name: _destCtrl.text.trim(), address: _destinationAddress ?? _destCtrl.text.trim(), latitude: route.destination!.latitude, longitude: route.destination!.longitude),
+            origin: GeoPoint(
+              name: LocationDisplayFormatter.title(_pickupSelection),
+              address: _pickupCtrl.text.trim(),
+              latitude: route.pickup!.latitude,
+              longitude: route.pickup!.longitude,
+            ),
+            destination: GeoPoint(
+              name: LocationDisplayFormatter.title(_destinationSelection),
+              address: _destinationAddress ?? _destCtrl.text.trim(),
+              latitude: route.destination!.latitude,
+              longitude: route.destination!.longitude,
+            ),
             departureTimeUtc: departure,
             seats: _seats,
             pricePerSeat: price,
@@ -362,7 +415,24 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                   borderRadius: BorderRadius.circular(12),
                   child: InputDecorator(
                     decoration: const InputDecoration(labelText: 'Pickup', prefixIcon: Icon(Icons.trip_origin, color: Colors.green)),
-                    child: Text(_pickupCtrl.text.trim().isEmpty ? 'Select pickup location' : _pickupCtrl.text.trim(), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    child: _pickupCtrl.text.trim().isEmpty
+                        ? const Text('Select pickup location')
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                LocationDisplayFormatter.title(_pickupSelection),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                LocationDisplayFormatter.subtitle(_pickupSelection),
+                                style: Theme.of(context).textTheme.bodySmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -371,7 +441,24 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                   borderRadius: BorderRadius.circular(12),
                   child: InputDecorator(
                     decoration: const InputDecoration(labelText: 'Final Destination', prefixIcon: Icon(Icons.location_on, color: Colors.red)),
-                    child: Text(_destCtrl.text.trim().isEmpty ? 'Select final destination' : _destCtrl.text.trim(), maxLines: 2, overflow: TextOverflow.ellipsis),
+                    child: _destCtrl.text.trim().isEmpty
+                        ? const Text('Select final destination')
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                LocationDisplayFormatter.title(_destinationSelection),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              Text(
+                                LocationDisplayFormatter.subtitle(_destinationSelection),
+                                style: Theme.of(context).textTheme.bodySmall,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
                   ),
                 ),
               ],
@@ -389,9 +476,9 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                 ],
               ),
               RideTimeline(
-                pickup: _pickupCtrl.text.trim().isEmpty ? 'Pickup' : _pickupCtrl.text.trim(),
+                pickup: _pickupCtrl.text.trim().isEmpty ? 'Pickup' : LocationDisplayFormatter.title(_pickupSelection),
                 stops: route.stops.map((s) => s.name).toList(),
-                destination: _destCtrl.text.trim().isEmpty ? 'Final destination' : _destCtrl.text.trim(),
+                destination: _destCtrl.text.trim().isEmpty ? 'Final destination' : LocationDisplayFormatter.title(_destinationSelection),
               ),
             ]),
           ),

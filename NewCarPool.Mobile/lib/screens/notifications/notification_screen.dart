@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/widgets/app_design_system.dart';
+import '../../core/utils/location_display_formatter.dart';
 import '../../models/notification_models.dart';
 import '../../providers/notification_provider.dart';
 import '../../providers/profile_provider.dart';
@@ -182,7 +183,7 @@ class _NotificationCard extends StatelessWidget {
                 child: Icon(icon, color: AppDesignTokens.brandStart),
               ),
               title: Text(item.title),
-              subtitle: Text(item.message),
+              subtitle: Text(_compactMessage(item.message)),
               trailing: onMarkRead == null
                   ? null
                   : TextButton(
@@ -231,5 +232,26 @@ class _NotificationCard extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _compactMessage(String message) {
+    var output = message;
+    final fromTo = RegExp(r'from (.+?) to (.+?)\.');
+    output = output.replaceAllMapped(fromTo, (m) {
+      final from = LocationDisplayFormatter.title({'displayName': m.group(1)});
+      final to = LocationDisplayFormatter.title({'displayName': m.group(2)});
+      return 'from $from to $to.';
+    });
+    final pickup = RegExp(r'Pickup:\s*([^\.]+)\.');
+    output = output.replaceAllMapped(pickup, (m) {
+      final value = LocationDisplayFormatter.title({'displayName': m.group(1)});
+      return 'Pickup: $value.';
+    });
+    final drop = RegExp(r'Drop:\s*([^\.]+)\.');
+    output = output.replaceAllMapped(drop, (m) {
+      final value = LocationDisplayFormatter.title({'displayName': m.group(1)});
+      return 'Drop: $value.';
+    });
+    return output;
   }
 }

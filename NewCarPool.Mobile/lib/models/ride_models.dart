@@ -1,4 +1,5 @@
 import 'package:latlong2/latlong.dart';
+import '../core/utils/departure_time_utils.dart';
 
 class GeoPoint {
   const GeoPoint({
@@ -73,7 +74,10 @@ class RideOffer {
             .map((x) => RideStop.fromJson(Map<String, dynamic>.from(x as Map)))
             .toList()
           ..sort((a, b) => a.order.compareTo(b.order)),
-        departureTimeUtc: DateTime.parse(json['departureTimeUtc']),
+        departureTimeUtc: DepartureTimeUtils.parseUtcFromBackend(
+          json['departureTimeUtc'],
+          context: 'RideOffer.fromJson',
+        ),
         availableSeats: json['availableSeats'],
         participantCount: (json['participantCount'] as num?)?.toInt() ?? 0,
         pricePerSeat: json['pricePerSeat'],

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_routes.dart';
+import '../../core/utils/departure_time_utils.dart';
+import '../../core/utils/location_display_formatter.dart';
 import '../../core/widgets/app_design_system.dart';
+import '../../core/widgets/ride_timeline_widgets.dart';
 import '../../models/ride_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
@@ -295,7 +297,14 @@ class _TripPreviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final nodes = ride == null
+        ? const <RideTimelineNode>[]
+        : buildRideTimeline(
+            ride: ride!,
+            departureUtc: ride!.departureTimeUtc,
+          );
     return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -304,7 +313,10 @@ class _TripPreviewCard extends StatelessWidget {
             Text(
               ride == null
                   ? 'No upcoming rides yet'
-                  : '${ride!.origin.name}  ->  ${ride!.destination.name}',
+                  : LocationDisplayFormatter.routeTitle(
+                      ride!.origin,
+                      ride!.destination,
+                    ),
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
@@ -313,8 +325,19 @@ class _TripPreviewCard extends StatelessWidget {
             Text(
               ride == null
                   ? 'Search rides and book your next trip.'
-                  : 'Departure: ${DateFormat('dd MMM, hh:mm a').format(ride!.departureTimeUtc.toLocal())}',
+                  : 'Departure: ${DepartureTimeUtils.formatFriendly(ride!.departureTimeUtc, context: 'Dashboard Upcoming Ride')}',
             ),
+            if (ride != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                nodes.map((e) => e.locationTitle).join(' -> '),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              RideMiniProgressTimeline(nodes: nodes),
+            ],
             const SizedBox(height: 4),
             Text(ride == null
                 ? 'Driver details appear after booking.'

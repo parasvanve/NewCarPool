@@ -1,12 +1,14 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/constants/app_routes.dart';
 import '../../core/errors/app_exception.dart';
+import '../../core/utils/departure_time_utils.dart';
+import '../../core/utils/location_display_formatter.dart';
 import '../../core/widgets/app_design_system.dart';
+import '../../core/widgets/ride_timeline_widgets.dart';
 import '../../models/booking_models.dart';
 import '../../models/ride_models.dart';
 import '../../providers/auth_provider.dart';
@@ -25,7 +27,7 @@ class TripsScreen extends StatefulWidget {
 }
 
 class _TripsScreenState extends State<TripsScreen> {
-  int _tab = 0; // 0 upcoming, 1 booked, 2 cancelled
+  int _tab = 0;
   String? _bookingRideId;
 
   @override
@@ -52,7 +54,9 @@ class _TripsScreenState extends State<TripsScreen> {
             b.bookingStatus == BookingStatus.accepted &&
             (myUserId == null || b.passengerId == myUserId))
         .toList();
-    final bookedRideIds = bookedByMe.map((b) => b.rideOfferId).toSet();
+    final bookedByRide = {
+      for (final booking in bookedByMe) booking.rideOfferId: booking,
+    };
 
     final offeredRides = allRides
         .where((r) => myUserId != null && r.driverId == myUserId)
@@ -68,7 +72,7 @@ class _TripsScreenState extends State<TripsScreen> {
         .toList();
 
     return Scaffold(
-      backgroundColor: AppDesignTokens.pageBg,
+      backgroundColor: const Color(0xFFF6F7FC),
       appBar: widget.showAppBar ? AppBar(title: const Text('My Trips')) : null,
       body: Align(
         alignment: Alignment.topCenter,
@@ -114,17 +118,15 @@ class _TripsScreenState extends State<TripsScreen> {
                           ? _UpcomingTab(
                               offeredRides: offeredRides,
                               availableRides: availableRides,
-                              bookedRideIds: bookedRideIds,
+                              bookedByRide: bookedByRide,
                               bookingRideId: _bookingRideId,
-                              currentUserId: myUserId,
                               onRideAction: (ride, action) async {
                                 final provider = context.read<RideProvider>();
-                                if (action == 'start')
-                                  await provider.startRide(ride.id);
-                                if (action == 'complete')
+                                if (action == 'start') await provider.startRide(ride.id);
+                                if (action == 'complete') {
                                   await provider.completeRide(ride.id);
-                                if (action == 'cancel')
-                                  await provider.cancelRide(ride.id);
+                                }
+                                if (action == 'cancel') await provider.cancelRide(ride.id);
                                 await _refreshAll();
                               },
                               onBookRide: (ride) async {
@@ -137,20 +139,17 @@ class _TripsScreenState extends State<TripsScreen> {
                                   if (!mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: Text(
-                                          AppException.fromDio(error).message),
+                                      content: Text(AppException.fromDio(error).message),
                                       backgroundColor: Colors.red,
                                     ),
                                   );
                                 } finally {
-                                  if (mounted)
-                                    setState(() => _bookingRideId = null);
+                                  if (mounted) setState(() => _bookingRideId = null);
                                 }
                               },
                             )
                           : _tab == 1
-                              ? _BookedTab(
-                                  bookings: bookedByMe, rides: allRides)
+                              ? _BookedTab(bookings: bookedByMe, rides: allRides)
                               : _CancelledTab(bookings: cancelledBookings),
                 ),
               ),
@@ -166,18 +165,16 @@ class _UpcomingTab extends StatelessWidget {
   const _UpcomingTab({
     required this.offeredRides,
     required this.availableRides,
-    required this.bookedRideIds,
+    required this.bookedByRide,
     required this.bookingRideId,
-    required this.currentUserId,
     required this.onRideAction,
     required this.onBookRide,
   });
 
   final List<RideOffer> offeredRides;
   final List<RideOffer> availableRides;
-  final Set<String> bookedRideIds;
+  final Map<String, RideBooking> bookedByRide;
   final String? bookingRideId;
-  final String? currentUserId;
   final Future<void> Function(RideOffer ride, String action) onRideAction;
   final Future<void> Function(RideOffer ride) onBookRide;
 
@@ -185,12 +182,9 @@ class _UpcomingTab extends StatelessWidget {
   Widget build(BuildContext context) {
     if (offeredRides.isEmpty && availableRides.isEmpty) {
       return ListView(
-        children: [
-          const SizedBox(height: 140),
-          Icon(Icons.calendar_month_outlined,
-              size: 54, color: Colors.grey.shade400),
-          const SizedBox(height: 8),
-          const Center(child: Text('No upcoming rides available')),
+        children: const [
+          SizedBox(height: 140),
+          Center(child: Text('No upcoming rides available')),
         ],
       );
     }
@@ -203,17 +197,16 @@ class _UpcomingTab extends StatelessWidget {
           ...offeredRides.map(
             (ride) => _RideCard(
               ride: ride,
-              statusBadge: 'Scheduled',
-              primaryLabel: 'Chat',
-              secondaryLabel: 'View Details',
-              tertiaryLabel: 'Edit Ride',
-              dangerLabel: 'Cancel Ride',
-              onPrimary: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => RideChatScreen(ride: ride))),
-              onSecondary: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => RideDetailsScreen(extra: ride))),
-              onTertiary: null,
-              onDanger: () => onRideAction(ride, 'cancel'),
+              statusBadge: 'Offered',
+              primaryLabel: 'View Details',
+              secondaryLabel: 'Chat',
+              tertiaryLabel: 'Cancel Ride',
+              onPrimary: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride)),
+              ),
+              onSecondary: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
+              onTertiary: () => onRideAction(ride, 'cancel'),
             ),
           ),
           const SizedBox(height: 8),
@@ -221,24 +214,25 @@ class _UpcomingTab extends StatelessWidget {
         if (availableRides.isNotEmpty) ...[
           const _SectionHeader('Available Rides'),
           ...availableRides.map((ride) {
-            final alreadyBooked = bookedRideIds.contains(ride.id);
+            final booking = bookedByRide[ride.id];
+            final alreadyBooked = booking != null;
             final bookingInProgress = bookingRideId == ride.id;
             return _RideCard(
               ride: ride,
               statusBadge: alreadyBooked ? 'Booked' : 'Available',
-              primaryLabel: alreadyBooked
-                  ? 'Chat with Driver'
-                  : (ride.availableSeats <= 0 ? 'Ride Full' : 'Book Ride'),
+              primaryLabel: alreadyBooked ? 'Chat with Driver' : 'Book Ride',
               secondaryLabel: 'View Details',
+              bookedSeats: booking?.seatsBooked,
+              yourPickupName: booking?.passengerPickup?.name,
+              yourDropName: booking?.passengerDrop?.name,
               onPrimary: alreadyBooked
-                  ? () => Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) => RideChatScreen(ride: ride)))
+                  ? () => Navigator.of(context)
+                      .push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride)))
                   : (ride.availableSeats > 0 && !bookingInProgress
                       ? () => onBookRide(ride)
                       : null),
-              onSecondary: () => Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => RideDetailsScreen(extra: ride))),
-              primaryBusy: bookingInProgress,
+              onSecondary: () => Navigator.of(context)
+                  .push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride))),
             );
           }),
         ],
@@ -257,12 +251,9 @@ class _BookedTab extends StatelessWidget {
   Widget build(BuildContext context) {
     if (bookings.isEmpty) {
       return ListView(
-        children: [
-          const SizedBox(height: 140),
-          Icon(Icons.event_available_outlined,
-              size: 54, color: Colors.grey.shade400),
-          const SizedBox(height: 8),
-          const Center(child: Text('No booked rides yet')),
+        children: const [
+          SizedBox(height: 140),
+          Center(child: Text('No booked rides yet')),
         ],
       );
     }
@@ -273,9 +264,9 @@ class _BookedTab extends StatelessWidget {
         const _SectionHeader('My Booked Rides'),
         ...bookings.map((booking) {
           RideOffer? ride;
-          for (final r in rides) {
-            if (r.id == booking.rideOfferId) {
-              ride = r;
+          for (final item in rides) {
+            if (item.id == booking.rideOfferId) {
+              ride = item;
               break;
             }
           }
@@ -283,27 +274,25 @@ class _BookedTab extends StatelessWidget {
             return Card(
               margin: const EdgeInsets.only(bottom: 12),
               child: ListTile(
-                title: Text(
-                    'Booking ${booking.id.substring(0, booking.id.length > 8 ? 8 : booking.id.length)}'),
-                subtitle: Text(
-                    'Seats: ${booking.seatsBooked} • Status: ${booking.bookingStatus.label}'),
+                title: Text('Booking ${booking.id.substring(0, booking.id.length > 8 ? 8 : booking.id.length)}'),
+                subtitle: Text('Seats: ${booking.seatsBooked} · ${booking.bookingStatus.label}'),
               ),
             );
           }
 
+          final rideValue = ride;
           return _RideCard(
-            ride: ride,
+            ride: rideValue,
             statusBadge: 'Booked',
-            bookingMeta:
-                'Booking ID: ${booking.id.substring(0, booking.id.length > 8 ? 8 : booking.id.length)}  •  ${booking.seatsBooked} seat(s)',
-            pickupMeta: booking.passengerPickup?.name,
-            dropMeta: booking.passengerDrop?.name,
             primaryLabel: 'View Details',
             secondaryLabel: 'Chat with Driver',
-            onPrimary: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => RideDetailsScreen(extra: ride!))),
-            onSecondary: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride!))),
+            bookedSeats: booking.seatsBooked,
+            yourPickupName: booking.passengerPickup?.name,
+            yourDropName: booking.passengerDrop?.name,
+            onPrimary: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: rideValue))),
+            onSecondary: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: rideValue))),
           );
         }),
       ],
@@ -320,11 +309,9 @@ class _CancelledTab extends StatelessWidget {
   Widget build(BuildContext context) {
     if (bookings.isEmpty) {
       return ListView(
-        children: [
-          const SizedBox(height: 140),
-          Icon(Icons.cancel_outlined, size: 54, color: Colors.grey.shade400),
-          const SizedBox(height: 8),
-          const Center(child: Text('No cancelled rides')),
+        children: const [
+          SizedBox(height: 140),
+          Center(child: Text('No cancelled rides')),
         ],
       );
     }
@@ -336,13 +323,11 @@ class _CancelledTab extends StatelessWidget {
         ...bookings.map(
           (booking) => Card(
             margin: const EdgeInsets.only(bottom: 12),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
             child: ListTile(
-              leading:
-                  const Icon(Icons.cancel_outlined, color: Colors.redAccent),
-              title: Text(
-                  'Booking ${booking.id.substring(0, booking.id.length > 8 ? 8 : booking.id.length)}'),
-              subtitle: Text(
-                  '${booking.seatsBooked} seat(s) • ${booking.bookingStatus.label}'),
+              leading: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
+              title: Text('Booking ${booking.id.substring(0, booking.id.length > 8 ? 8 : booking.id.length)}'),
+              subtitle: Text('${booking.seatsBooked} seat(s) · ${booking.bookingStatus.label}'),
             ),
           ),
         ),
@@ -361,12 +346,9 @@ class _RideCard extends StatelessWidget {
     this.onSecondary,
     this.tertiaryLabel,
     this.onTertiary,
-    this.dangerLabel,
-    this.onDanger,
-    this.primaryBusy = false,
-    this.bookingMeta,
-    this.pickupMeta,
-    this.dropMeta,
+    this.bookedSeats,
+    this.yourPickupName,
+    this.yourDropName,
   });
 
   final RideOffer ride;
@@ -377,17 +359,27 @@ class _RideCard extends StatelessWidget {
   final VoidCallback? onSecondary;
   final String? tertiaryLabel;
   final VoidCallback? onTertiary;
-  final String? dangerLabel;
-  final VoidCallback? onDanger;
-  final bool primaryBusy;
-  final String? bookingMeta;
-  final String? pickupMeta;
-  final String? dropMeta;
+  final int? bookedSeats;
+  final String? yourPickupName;
+  final String? yourDropName;
 
   @override
   Widget build(BuildContext context) {
+    final nodes = buildRideTimeline(
+      ride: ride,
+      yourPickupName: (yourPickupName == null || yourPickupName!.trim().isEmpty)
+          ? null
+          : LocationDisplayFormatter.title({'name': yourPickupName}),
+      yourDropName: (yourDropName == null || yourDropName!.trim().isEmpty)
+          ? null
+          : LocationDisplayFormatter.title({'name': yourDropName}),
+      departureUtc: ride.departureTimeUtc,
+    );
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 1.5,
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -397,21 +389,19 @@ class _RideCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    '${ride.origin.name} ? ${ride.destination.name}',
-                    style: const TextStyle(
-                        fontWeight: FontWeight.w700, fontSize: 18),
+                    LocationDisplayFormatter.routeTitle(ride.origin, ride.destination),
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 24),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: statusBadge == 'Booked'
                         ? const Color(0xFFDFF7EA)
                         : const Color(0xFFE7EAFE),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(14),
                   ),
                   child: Text(
                     statusBadge,
@@ -420,71 +410,75 @@ class _RideCard extends StatelessWidget {
                           ? const Color(0xFF15803D)
                           : AppDesignTokens.brandStart,
                       fontWeight: FontWeight.w700,
-                      fontSize: 12,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            Text(DateFormat('dd MMM yyyy, hh:mm a')
-                .format(ride.departureTimeUtc.toLocal())),
-            const SizedBox(height: 4),
-            Text(
-                'Driver: ${ride.driverName.isEmpty ? 'Driver' : ride.driverName}'),
-            const SizedBox(height: 4),
-            Text(
-                '?${ride.pricePerSeat} / seat • ${ride.availableSeats} seats left'),
-            const SizedBox(height: 4),
-            Text('${ride.vehicleName ?? 'Vehicle'} ${ride.vehicleNumber ?? ''}'
-                .trim()),
-            if ((bookingMeta ?? '').isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text(bookingMeta!,
-                  style: const TextStyle(fontWeight: FontWeight.w600)),
-            ],
-            if ((pickupMeta ?? '').isNotEmpty) ...[
-              const SizedBox(height: 4),
-              Text('Pickup: $pickupMeta'),
-            ],
-            if ((dropMeta ?? '').isNotEmpty) ...[
-              const SizedBox(height: 2),
-              Text('Drop: $dropMeta'),
-            ],
             const SizedBox(height: 10),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today_outlined, size: 16),
+                const SizedBox(width: 6),
+                Text(DepartureTimeUtils.formatFriendly(ride.departureTimeUtc, context: 'Trips Card')),
+                const SizedBox(width: 12),
+                const Icon(Icons.person_outline, size: 16),
+                const SizedBox(width: 6),
+                Expanded(child: Text(ride.driverName.isEmpty ? 'Driver' : ride.driverName)),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: RideVerticalTimeline(nodes: nodes),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: Text('₹${ride.pricePerSeat} / seat')),
+                Expanded(
+                  child: Text(
+                    bookedSeats == null
+                        ? '${ride.availableSeats} seats left'
+                        : '$bookedSeats seat booked',
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    '${ride.vehicleName ?? 'Vehicle'} ${ride.vehicleNumber ?? ''}'.trim(),
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                FilledButton.tonalIcon(
-                  onPressed: primaryBusy ? null : onPrimary,
-                  icon: primaryBusy
-                      ? const SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.check_circle_outline),
+                OutlinedButton.icon(
+                  onPressed: onPrimary,
+                  icon: const Icon(Icons.open_in_new),
                   label: Text(primaryLabel),
                 ),
                 if (secondaryLabel != null)
-                  OutlinedButton.icon(
+                  FilledButton.tonalIcon(
                     onPressed: onSecondary,
-                    icon: const Icon(Icons.open_in_new),
+                    icon: const Icon(Icons.chat_bubble_outline),
                     label: Text(secondaryLabel!),
                   ),
                 if (tertiaryLabel != null)
                   OutlinedButton.icon(
                     onPressed: onTertiary,
-                    icon: const Icon(Icons.edit_outlined),
-                    label: Text(tertiaryLabel!),
-                  ),
-                if (dangerLabel != null)
-                  OutlinedButton.icon(
-                    onPressed: onDanger,
-                    style:
-                        OutlinedButton.styleFrom(foregroundColor: Colors.red),
                     icon: const Icon(Icons.cancel_outlined),
-                    label: Text(dangerLabel!),
+                    label: Text(tertiaryLabel!),
+                    style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent),
                   ),
               ],
             ),
@@ -506,8 +500,7 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(2, 6, 2, 10),
       child: Text(
         title,
-        style: const TextStyle(
-            fontWeight: FontWeight.w700, color: AppDesignTokens.brandStart),
+        style: const TextStyle(fontWeight: FontWeight.w700, color: AppDesignTokens.brandStart),
       ),
     );
   }
@@ -526,8 +519,6 @@ class _TripFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChoiceChip(
-        label: Text(label), selected: selected, onSelected: (_) => onTap());
+    return ChoiceChip(label: Text(label), selected: selected, onSelected: (_) => onTap());
   }
 }
-
