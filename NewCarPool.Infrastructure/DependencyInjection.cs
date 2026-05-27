@@ -54,7 +54,8 @@ public static class DependencyInjection
                     {
                         var accessToken = context.Request.Query["access_token"];
                         var path = context.HttpContext.Request.Path;
-                        if (!string.IsNullOrWhiteSpace(accessToken) && path.StartsWithSegments("/hubs/tracking"))
+                        if (!string.IsNullOrWhiteSpace(accessToken) &&
+                            (path.StartsWithSegments("/hubs/tracking") || path.StartsWithSegments("/hubs/notifications")))
                         {
                             context.Token = accessToken;
                         }
@@ -81,6 +82,7 @@ public static class DependencyInjection
         services.AddScoped<IReviewService, ReviewService>();
         services.AddScoped<IMapService, MapService>();
         services.AddScoped<IAdminService, AdminService>();
+        services.AddHostedService<TripReminderBackgroundService>();
 
         return services;
     }

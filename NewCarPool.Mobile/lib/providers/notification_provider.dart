@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
 
 import '../models/notification_models.dart';
 import '../services/notification_service.dart';
@@ -12,6 +13,9 @@ class NotificationProvider extends ChangeNotifier {
   bool isLoading = false;
   String? errorMessage;
   int unreadCountValue = 0;
+  NotificationKind activeFilter = NotificationKind.all;
+  Timer? _unreadTimer;
+  Timer? _listTimer;
 
   Future<void> loadMine() async {
     isLoading = true;
@@ -39,17 +43,7 @@ class NotificationProvider extends ChangeNotifier {
     await _notificationService.markRead(notificationId);
     final index = notifications.indexWhere((x) => x.id == notificationId);
     if (index >= 0) {
-      final current = notifications[index];
-      notifications[index] = AppNotification(
-        id: current.id,
-        title: current.title,
-        message: current.message,
-        typeCode: current.typeCode,
-        rideId: current.rideId,
-        bookingId: current.bookingId,
-        isRead: true,
-        createdAtUtc: current.createdAtUtc,
-      );
+      notifications[index] = notifications[index].copyWith(isRead: true);
       unreadCountValue = notifications.where((x) => !x.isRead).length;
       notifyListeners();
     }
@@ -60,5 +54,53 @@ class NotificationProvider extends ChangeNotifier {
       unreadCountValue = await _notificationService.unreadCount();
       notifyListeners();
     } catch (_) {}
+  }
+
+  Future<void> markAllRead() async {
+    await _notificationService.markAllRead();
+    notifications = notifications.map((n) => n.copyWith(isRead: true)).toList();
+    unreadCountValue = 0;
+    notifyListeners();
+  }
+
+  void setFilter(NotificationKind filter) {
+    activeFilter = filter;
+    notifyListeners();
+  }
+
+  List<AppNotification> get filteredNotifications {
+    if (activeFilter == NotificationKind.all) return notifications;
+    return notifications.where((n) => n.kind == activeFilter).toList();
+  }
+
+  void startUnreadAutoRefresh({Duration interval = const Duration(seconds: 15)}) {
+    _unreadTimer?.cancel();
+    _unreadTimer = Timer.periodic(interval, (_) => loadUnreadCount());
+  }
+
+  void stopUnreadAutoRefresh() {
+    _unreadTimer?.cancel();
+    _unreadTimer = null;
+  }
+
+  void startListAutoRefresh({Duration interval = const Duration(seconds: 15)}) {
+    _listTimer?.cancel();
+    _listTimer = Timer.periodic(interval, (_) async {
+      try {
+        await loadMine();
+      } catch (_) {}
+    });
+  }
+
+  void stopListAutoRefresh() {
+    _listTimer?.cancel();
+    _listTimer = null;
+  }
+
+  @override
+  void dispose() {
+    _unreadTimer?.cancel();
+    _listTimer?.cancel();
+    super.dispose();
   }
 }

@@ -32,6 +32,10 @@ class NotificationService {
     await _apiClient.dio.post('/notifications/$notificationId/read');
   }
 
+  Future<void> markAllRead() async {
+    await _apiClient.dio.post('/notifications/read-all');
+  }
+
   Future<int> unreadCount() async {
     final response = await _apiClient.dio.get('/notifications/unread-count');
     final value = response.data;

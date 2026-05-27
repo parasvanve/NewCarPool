@@ -45,4 +45,11 @@ public sealed class NotificationsController : ControllerBase
         await _notificationService.MarkReadAsync(User.GetUserId(), notificationId, cancellationToken);
         return NoContent();
     }
+
+    [HttpPost("read-all")]
+    public async Task<IActionResult> MarkAllRead(CancellationToken cancellationToken)
+    {
+        await _notificationService.MarkAllReadAsync(User.GetUserId(), cancellationToken);
+        return NoContent();
+    }
 }

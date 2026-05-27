@@ -8,6 +8,7 @@ import '../../core/utils/location_display_formatter.dart';
 import '../../models/ride_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/booking_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../../providers/ride_provider.dart';
 import '../../services/map_service.dart';
 
@@ -448,6 +449,8 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                       if (!mounted) return;
                       await context.read<RideProvider>().loadUpcomingActive();
                       await context.read<BookingProvider>().loadHistory();
+                      await context.read<NotificationProvider>().loadMine();
+                      await context.read<NotificationProvider>().loadUnreadCount();
                       messenger.showSnackBar(
                         const SnackBar(content: Text('Ride booked successfully')),
                       );

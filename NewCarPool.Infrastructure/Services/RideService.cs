@@ -352,6 +352,21 @@ public sealed class RideService : IRideService
                 BookingId = booking.Id,
                 CreatedAtUtc = DateTime.UtcNow
             });
+            _dbContext.Notifications.Add(new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = passengerId,
+                Title = "Ride booked successfully",
+                Message = Truncate(
+                    $"Your ride with {ride.Driver?.FullName ?? "Driver"} is confirmed. " +
+                    $"Pickup: {ShortLocationName(booking.PassengerPickupName)}. " +
+                    $"Drop: {ShortLocationName(booking.PassengerDropName)}. Seats: {booking.SeatsBooked}.",
+                    1000),
+                Type = NotificationType.BookingConfirmed,
+                RideId = ride.Id,
+                BookingId = booking.Id,
+                CreatedAtUtc = DateTime.UtcNow
+            });
 
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             await EnsureRideChatGroupAsync(ride.Id, cancellationToken);
@@ -429,6 +444,38 @@ public sealed class RideService : IRideService
         };
         await _chatMessages.AddAsync(message, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var participantIds = await _rideBookings.Query()
+            .Where(x => x.RideOfferId == rideOfferId && x.Status == BookingStatus.Confirmed)
+            .Select(x => x.PassengerId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var driverId = await _rideOffers.Query()
+            .Where(x => x.Id == rideOfferId)
+            .Select(x => x.DriverId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (driverId != Guid.Empty) participantIds.Add(driverId);
+        var recipients = participantIds
+            .Where(x => x != userId)
+            .Distinct()
+            .ToList();
+        foreach (var recipientId in recipients)
+        {
+            _dbContext.Notifications.Add(new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = recipientId,
+                Title = $"New message from {sender.FullName}",
+                Message = Truncate(request.Message.Trim(), 300),
+                Type = NotificationType.NewMessage,
+                RideId = rideOfferId,
+                CreatedAtUtc = DateTime.UtcNow
+            });
+        }
+        if (recipients.Count > 0)
+        {
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
         return new RideChatMessageDto(message.Id, rideOfferId, userId, sender.FullName, message.Message, message.CreatedAtUtc);
     }
 

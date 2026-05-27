@@ -37,8 +37,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RideProvider>().loadUpcomingActive();
       context.read<NotificationProvider>().loadUnreadCount();
+      context.read<NotificationProvider>().startUnreadAutoRefresh();
       context.read<BookingProvider>().loadHistory();
     });
+  }
+
+  @override
+  void dispose() {
+    context.read<NotificationProvider>().stopUnreadAutoRefresh();
+    super.dispose();
   }
 
   @override

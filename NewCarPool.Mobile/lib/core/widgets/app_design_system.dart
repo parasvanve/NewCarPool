@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/notification_provider.dart';
 
 class AppDesignTokens {
   static const brandStart = Color(0xFF5B5DFF);
@@ -163,28 +165,56 @@ class AppBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final unread = context.watch<NotificationProvider>().unreadCountValue;
     return NavigationBar(
       selectedIndex: index,
       onDestinationSelected: onChanged,
       height: 68,
       backgroundColor: Colors.white,
-      destinations: const [
-        NavigationDestination(
+      destinations: [
+        const NavigationDestination(
           icon: Icon(Icons.home_outlined),
           selectedIcon: Icon(Icons.home),
           label: 'Home',
         ),
-        NavigationDestination(
+        const NavigationDestination(
           icon: Icon(Icons.route_outlined),
           selectedIcon: Icon(Icons.route),
           label: 'Trips',
         ),
         NavigationDestination(
-          icon: Icon(Icons.notifications_outlined),
-          selectedIcon: Icon(Icons.notifications),
+          icon: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(Icons.notifications_outlined),
+              if (unread > 0)
+                Positioned(
+                  right: -5,
+                  top: -4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    constraints: const BoxConstraints(minWidth: 14),
+                    child: Text(
+                      unread > 99 ? '99+' : '$unread',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          selectedIcon: const Icon(Icons.notifications),
           label: 'Alerts',
         ),
-        NavigationDestination(
+        const NavigationDestination(
           icon: Icon(Icons.person_outline),
           selectedIcon: Icon(Icons.person),
           label: 'Profile',

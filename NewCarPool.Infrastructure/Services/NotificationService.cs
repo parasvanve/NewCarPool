@@ -54,6 +54,21 @@ public sealed class NotificationService : INotificationService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task MarkAllReadAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var unread = await _notifications.Query()
+            .Where(x => x.UserId == userId && !x.IsRead)
+            .ToListAsync(cancellationToken);
+        if (unread.Count == 0) return;
+        var now = DateTime.UtcNow;
+        foreach (var notification in unread)
+        {
+            notification.IsRead = true;
+            notification.ReadAtUtc = now;
+        }
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
     private static NotificationDto Map(Notification notification) =>
         new(
             notification.Id,

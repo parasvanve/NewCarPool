@@ -7,5 +7,9 @@ public enum NotificationType
     RideCancelled = 2,
     NewMessage = 3,
     TripReminder = 4,
-    General = 5
+    General = 5,
+    BookingConfirmed = 6,
+    RideStarted = 7,
+    RideCompleted = 8,
+    System = 9
 }

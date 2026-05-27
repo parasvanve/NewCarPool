@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../../models/ride_models.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../../providers/ride_chat_provider.dart';
 
 class RideChatScreen extends StatefulWidget {
@@ -118,6 +119,7 @@ class _RideChatScreenState extends State<RideChatScreen> {
                       if (text.isEmpty) return;
                       _ctrl.clear();
                       await context.read<RideChatProvider>().send(widget.ride.id, text);
+                      await context.read<NotificationProvider>().loadUnreadCount();
                       _scrollToEnd();
                     },
                     icon: const Icon(Icons.send),
