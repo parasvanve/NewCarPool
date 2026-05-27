@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -7,14 +7,18 @@ import '../../core/utils/departure_time_utils.dart';
 import '../../core/utils/location_display_formatter.dart';
 import '../../core/widgets/app_design_system.dart';
 import '../../core/widgets/ride_timeline_widgets.dart';
+import '../../models/booking_models.dart';
 import '../../models/ride_models.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/booking_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/ride_provider.dart';
 import '../notifications/notification_screen.dart';
 import '../profile/profile_screen.dart';
 import '../rides/offer_ride_form_screen.dart';
+import '../rides/ride_chat_screen.dart';
+import '../rides/ride_details_screen.dart';
 import '../trips/trips_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -33,6 +37,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<RideProvider>().loadUpcomingActive();
       context.read<NotificationProvider>().loadUnreadCount();
+      context.read<BookingProvider>().loadHistory();
     });
   }
 
@@ -46,6 +51,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ];
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF7F8FC),
       body: SafeArea(child: pages[_index]),
       bottomNavigationBar: AppBottomNav(
         index: _index,
@@ -60,148 +66,104 @@ class _HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width > 900;
+    final isWide = MediaQuery.of(context).size.width > 980;
     final auth = context.watch<AuthProvider>();
     final profile = context.watch<ProfileProvider>().profile;
-    final rides = context.select<RideProvider, List<RideOffer>>(
-      (provider) => provider.upcomingActiveRides,
-    );
-    final displayName =
-        (profile?.fullName ?? auth.session?.fullName ?? '').trim();
-    final firstName =
-        displayName.isEmpty ? 'there' : displayName.split(' ').first;
-    final myUserId = auth.session?.userId;
-    final unreadCount = context.watch<NotificationProvider>().unreadCountValue;
-    final upcomingRides = List<RideOffer>.from(rides)
+    final rideProvider = context.watch<RideProvider>();
+    final rides = List<RideOffer>.from(rideProvider.upcomingActiveRides)
       ..sort((a, b) => a.departureTimeUtc.compareTo(b.departureTimeUtc));
-    final previewRides = upcomingRides.take(3).toList();
+    final bookings = context.watch<BookingProvider>().bookings;
 
-    final quickActions = Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        SizedBox(
-          width: isWide ? 170 : (MediaQuery.of(context).size.width - 54) / 3,
-          child: AppQuickActionTile(
-            icon: Icons.garage_outlined,
-            label: 'Vehicles',
-            onTap: () => context.push(AppRoutes.vehicles),
-          ),
-        ),
-        SizedBox(
-          width: isWide ? 170 : (MediaQuery.of(context).size.width - 54) / 3,
-          child: AppQuickActionTile(
-            icon: Icons.payments_outlined,
-            label: 'Payments',
-            onTap: () => context.push(AppRoutes.payments),
-          ),
-        ),
-        SizedBox(
-          width: isWide ? 170 : (MediaQuery.of(context).size.width - 54) / 3,
-          child: AppQuickActionTile(
-            icon: Icons.location_searching_outlined,
-            label: 'Tracking',
-            onTap: () => context.push(AppRoutes.tracking),
-          ),
-        ),
-        SizedBox(
-          width: isWide ? 170 : (MediaQuery.of(context).size.width - 54) / 3,
-          child: AppQuickActionTile(
-            icon: Icons.fact_check_outlined,
-            label: 'Requests',
-            onTap: () => context.push(AppRoutes.driverRequests),
-          ),
-        ),
-      ],
-    );
+    final displayName = (profile?.fullName ?? auth.session?.fullName ?? '').trim();
+    final firstName = displayName.isEmpty ? 'there' : displayName.split(' ').first;
+    final unreadCount = context.watch<NotificationProvider>().unreadCountValue;
+    final myUserId = auth.session?.userId;
 
-    final searchCard = Card(
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const _RouteRow(
-              icon: Icons.radio_button_checked,
-              iconColor: Color(0xFF22C55E),
-              text: 'Pickup location',
-            ),
-            const Padding(
-              padding: EdgeInsets.only(left: 11),
-              child: SizedBox(height: 18, child: VerticalDivider()),
-            ),
-            const _RouteRow(
-              icon: Icons.location_on_rounded,
-              iconColor: Color(0xFFEF4444),
-              text: 'Destination',
-            ),
-            const SizedBox(height: 14),
-            OutlinedButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const OfferRideFormScreen(),
-                ),
-              ),
-              icon: const Icon(Icons.local_taxi_outlined),
-              label: const Text('Offer Ride'),
-            ),
-          ],
-        ),
-      ),
-    );
+    final bookedByRide = {
+      for (final booking in bookings.where(
+        (b) =>
+            b.bookingStatus == BookingStatus.accepted &&
+            (myUserId == null || b.passengerId == myUserId),
+      ))
+        booking.rideOfferId: booking,
+    };
 
-    final rightColumn = Column(
+    final firstRide = rides.isEmpty ? null : rides.first;
+    final pickupText = firstRide == null
+        ? 'Enter pickup location'
+        : LocationDisplayFormatter.title(firstRide.origin);
+    final destinationText = firstRide == null
+        ? 'Enter destination'
+        : LocationDisplayFormatter.title(firstRide.destination);
+
+    final leftPanel = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        AppGradientHeroCard(
-          title: 'Hi, $firstName',
-          subtitle: 'Where are you going today?',
-          icon: Icons.waving_hand_rounded,
+        _GreetingCard(firstName: firstName),
+        const SizedBox(height: 12),
+        _PickupDestinationCard(
+          pickupText: pickupText,
+          destinationText: destinationText,
         ),
-        const SizedBox(height: 14),
-        searchCard,
-        const SizedBox(height: 16),
-        quickActions,
+        const SizedBox(height: 12),
+        _OfferRideButton(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const OfferRideFormScreen()))),
+        const SizedBox(height: 12),
+        _QuickActions(isWide: isWide),
+        const SizedBox(height: 12),
+        const _WhyCarpoolCard(),
       ],
     );
 
-    final tripsColumn = Column(
+    final rightPanel = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         FilledButton.icon(
+          style: FilledButton.styleFrom(
+            backgroundColor: AppDesignTokens.brandStart,
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
           onPressed: () => context.push(AppRoutes.searchRides),
           icon: const Icon(Icons.search),
           label: const Text('Search Ride'),
         ),
         const SizedBox(height: 14),
-        AppSectionHeader(
-          title: 'Upcoming Ride',
-          actionText: 'View all',
-          onAction: () => context.push(AppRoutes.trips),
+        Row(
+          children: [
+            const Expanded(
+              child: Text('Upcoming Rides', style: TextStyle(fontSize: 32, fontWeight: FontWeight.w700)),
+            ),
+            TextButton(
+              onPressed: () => context.push(AppRoutes.trips),
+              child: const Text('View all'),
+            ),
+          ],
         ),
         const SizedBox(height: 8),
-        if (previewRides.isEmpty)
-          const _TripPreviewCard()
-        else
-          ...previewRides.map(
-            (ride) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: _TripPreviewCard(
-                ride: ride,
-                canBook: myUserId == null
-                    ? ride.availableSeats > 0
-                    : (ride.driverId != myUserId && ride.availableSeats > 0),
-              ),
+        if (rideProvider.isLoading && rides.isEmpty)
+          const Center(child: CircularProgressIndicator())
+        else if (rides.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Text('No upcoming rides yet. Search rides and book your next trip.'),
             ),
-          ),
-        const SizedBox(height: 16),
-        const AppSectionHeader(title: 'Recent Searches'),
-        const SizedBox(height: 8),
-        const _RecentTile('Use Search Ride', 'to find nearby trips',
-            'Live results from backend'),
-        const _RecentTile('Offer Ride', 'to publish your own route',
-            'Driver or Passenger anytime'),
+          )
+        else
+          ...rides.take(4).map((ride) {
+            final booking = bookedByRide[ride.id];
+            final isDriver = myUserId != null && ride.driverId == myUserId;
+            final isBooked = booking != null;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _DashboardRideCard(
+                ride: ride,
+                booking: booking,
+                isDriver: isDriver,
+                isBooked: isBooked,
+              ),
+            );
+          }),
       ],
     );
 
@@ -209,7 +171,8 @@ class _HomeTab extends StatelessWidget {
       slivers: [
         SliverAppBar(
           pinned: true,
-          title: const Text('Home'),
+          backgroundColor: Colors.white,
+          title: const Text('Home', style: TextStyle(fontWeight: FontWeight.w700)),
           actions: [
             IconButton(
               onPressed: () => context.push(AppRoutes.notifications),
@@ -238,25 +201,26 @@ class _HomeTab extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(width: 8),
           ],
         ),
         SliverPadding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           sliver: SliverToBoxAdapter(
             child: isWide
                 ? Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(flex: 6, child: rightColumn),
-                      const SizedBox(width: 16),
-                      Expanded(flex: 5, child: tripsColumn),
+                      Expanded(flex: 5, child: leftPanel),
+                      const SizedBox(width: 14),
+                      Expanded(flex: 5, child: rightPanel),
                     ],
                   )
                 : Column(
                     children: [
-                      rightColumn,
-                      const SizedBox(height: 16),
-                      tripsColumn,
+                      leftPanel,
+                      const SizedBox(height: 12),
+                      rightPanel,
                     ],
                   ),
           ),
@@ -266,16 +230,100 @@ class _HomeTab extends StatelessWidget {
   }
 }
 
-class _RouteRow extends StatelessWidget {
-  const _RouteRow({
+class _GreetingCard extends StatelessWidget {
+  const _GreetingCard({required this.firstName});
+
+  final String firstName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        gradient: const LinearGradient(
+          colors: [Color(0xFF5B61FF), Color(0xFF2E39E6)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: const [
+          BoxShadow(color: Color(0x260F172A), blurRadius: 18, offset: Offset(0, 8)),
+        ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Hi, $firstName 👋',
+                  style: const TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Where are you going today?',
+                  style: TextStyle(color: Colors.white70, fontSize: 22, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.directions_car_filled, color: Colors.white70, size: 48),
+        ],
+      ),
+    );
+  }
+}
+
+class _PickupDestinationCard extends StatelessWidget {
+  const _PickupDestinationCard({
+    required this.pickupText,
+    required this.destinationText,
+  });
+
+  final String pickupText;
+  final String destinationText;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          children: [
+            _LocationRow(
+              icon: Icons.trip_origin,
+              iconColor: const Color(0xFF16A34A),
+              label: 'Pickup location',
+              value: pickupText,
+            ),
+            const Divider(height: 18),
+            _LocationRow(
+              icon: Icons.location_on,
+              iconColor: const Color(0xFFEF4444),
+              label: 'Destination',
+              value: destinationText,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LocationRow extends StatelessWidget {
+  const _LocationRow({
     required this.icon,
     required this.iconColor,
-    required this.text,
+    required this.label,
+    required this.value,
   });
 
   final IconData icon;
   final Color iconColor;
-  final String text;
+  final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
@@ -283,26 +331,108 @@ class _RouteRow extends StatelessWidget {
       children: [
         Icon(icon, color: iconColor, size: 18),
         const SizedBox(width: 10),
-        Text(text),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF475569))),
+              const SizedBox(height: 2),
+              Text(value, maxLines: 1, overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+        const Icon(Icons.gps_fixed, size: 16, color: AppDesignTokens.brandStart),
       ],
     );
   }
 }
 
-class _TripPreviewCard extends StatelessWidget {
-  const _TripPreviewCard({this.ride, this.canBook = false});
+class _OfferRideButton extends StatelessWidget {
+  const _OfferRideButton({required this.onTap});
 
-  final RideOffer? ride;
-  final bool canBook;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final nodes = ride == null
-        ? const <RideTimelineNode>[]
-        : buildRideTimeline(
-            ride: ride!,
-            departureUtc: ride!.departureTimeUtc,
-          );
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      style: OutlinedButton.styleFrom(
+        side: const BorderSide(color: AppDesignTokens.brandStart),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      icon: const Icon(Icons.local_taxi_outlined),
+      label: const Text('Offer Ride'),
+    );
+  }
+}
+
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({required this.isWide});
+
+  final bool isWide;
+
+  @override
+  Widget build(BuildContext context) {
+    final actions = [
+      (Icons.garage_outlined, 'Vehicles', 'Manage your vehicles', AppRoutes.vehicles),
+      (Icons.payments_outlined, 'Payments', 'Transactions & history', AppRoutes.payments),
+      (Icons.location_searching_outlined, 'Tracking', 'Live ride tracking', AppRoutes.tracking),
+      (Icons.fact_check_outlined, 'Requests', 'Ride requests', AppRoutes.driverRequests),
+    ];
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: actions.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: isWide ? 4 : 2,
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: isWide ? 1.02 : 1.2,
+      ),
+      itemBuilder: (context, i) {
+        final action = actions[i];
+        return Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: () => context.push(action.$4),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: const Color(0xFFEEF2FF),
+                    child: Icon(action.$1, color: AppDesignTokens.brandStart, size: 18),
+                  ),
+                  const Spacer(),
+                  Text(action.$2, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 2),
+                  Text(action.$3, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _WhyCarpoolCard extends StatelessWidget {
+  const _WhyCarpoolCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      (Icons.account_balance_wallet_outlined, 'Save Money', 'Share ride & save more', Color(0xFF22C55E)),
+      (Icons.eco_outlined, 'Eco Friendly', 'Reduce carbon emissions', Color(0xFF16A34A)),
+      (Icons.shield_outlined, 'Safe & Secure', 'Verified users & safe rides', Color(0xFF4F46E5)),
+      (Icons.schedule_outlined, 'On Time', 'Reach on time, every time', Color(0xFFF59E0B)),
+    ];
+
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Padding(
@@ -310,66 +440,135 @@ class _TripPreviewCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              ride == null
-                  ? 'No upcoming rides yet'
-                  : LocationDisplayFormatter.routeTitle(
-                      ride!.origin,
-                      ride!.destination,
-                    ),
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              ride == null
-                  ? 'Search rides and book your next trip.'
-                  : 'Departure: ${DepartureTimeUtils.formatFriendly(ride!.departureTimeUtc, context: 'Dashboard Upcoming Ride')}',
-            ),
-            if (ride != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                nodes.map((e) => e.locationTitle).join(' -> '),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 8),
-              RideMiniProgressTimeline(nodes: nodes),
-            ],
-            const SizedBox(height: 4),
-            Text(ride == null
-                ? 'Driver details appear after booking.'
-                : 'Driver: ${ride!.driverName}'),
-            if (ride != null) ...[
-              const SizedBox(height: 4),
-              Text('Seats: ${ride!.availableSeats} • ₹${ride!.pricePerSeat} / seat'),
-              const SizedBox(height: 4),
-              Text(
-                'Vehicle: ${ride!.vehicleName ?? 'Vehicle'} ${ride!.vehicleNumber ?? ''}'
-                    .trim(),
-              ),
-            ],
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: ride == null
-                  ? const FilledButton.tonal(
-                      onPressed: null,
-                      child: Text('Empty'),
-                    )
-                  : canBook
-                      ? FilledButton.tonal(
-                          onPressed: () => context.push(
-                            AppRoutes.rideDetails,
-                            extra: ride,
+            const Text('Why carpool with us?', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: items
+                  .map(
+                    (e) => SizedBox(
+                      width: 180,
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            backgroundColor: e.$4.withValues(alpha: 0.15),
+                            child: Icon(e.$1, color: e.$4),
                           ),
-                          child: const Text('Book Ride'),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(e.$2, style: const TextStyle(fontWeight: FontWeight.w700)),
+                                Text(e.$3, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _DashboardRideCard extends StatelessWidget {
+  const _DashboardRideCard({
+    required this.ride,
+    required this.booking,
+    required this.isDriver,
+    required this.isBooked,
+  });
+
+  final RideOffer ride;
+  final RideBooking? booking;
+  final bool isDriver;
+  final bool isBooked;
+
+  @override
+  Widget build(BuildContext context) {
+    final nodes = buildRideTimeline(
+      ride: ride,
+      yourPickupName: booking?.passengerPickup?.name == null
+          ? null
+          : LocationDisplayFormatter.title(booking!.passengerPickup!),
+      yourDropName: booking?.passengerDrop?.name == null
+          ? null
+          : LocationDisplayFormatter.title(booking!.passengerDrop!),
+      departureUtc: ride.departureTimeUtc,
+    );
+
+    final title = nodes.map((e) => e.locationTitle).join(' -> ');
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFDFF7EA),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    DepartureTimeUtils.formatFriendly(ride.departureTimeUtc, context: 'Dashboard Card'),
+                    style: const TextStyle(color: Color(0xFF15803D), fontWeight: FontWeight.w700, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            RideMiniProgressTimeline(nodes: nodes),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 16,
+              runSpacing: 8,
+              children: [
+                _MetaChip(icon: Icons.person_outline, label: 'Driver', value: ride.driverName),
+                _MetaChip(icon: Icons.event_seat_outlined, label: 'Seats Left', value: '${ride.availableSeats} seats'),
+                _MetaChip(icon: Icons.currency_rupee, label: 'Price / Seat', value: '₹${ride.pricePerSeat}'),
+                _MetaChip(icon: Icons.directions_car_outlined, label: 'Vehicle', value: '${ride.vehicleName ?? 'Vehicle'} ${ride.vehicleNumber ?? ''}'.trim()),
+              ],
+            ),
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: isBooked
+                  ? FilledButton.icon(
+                      onPressed: () => Navigator.of(context)
+                          .push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      label: const Text('Chat with Driver'),
+                    )
+                  : isDriver
+                      ? OutlinedButton.icon(
+                          onPressed: () => Navigator.of(context)
+                              .push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride))),
+                          icon: const Icon(Icons.open_in_new),
+                          label: const Text('View Details / Manage'),
                         )
-                      : const FilledButton.tonal(
-                          onPressed: null,
-                          child: Text('Upcoming'),
+                      : FilledButton(
+                          onPressed: () => context.push(AppRoutes.booking, extra: ride),
+                          child: const Text('Book Ride'),
                         ),
             ),
           ],
@@ -379,20 +578,23 @@ class _TripPreviewCard extends StatelessWidget {
   }
 }
 
-class _RecentTile extends StatelessWidget {
-  const _RecentTile(this.origin, this.destination, this.time);
-  final String origin;
-  final String destination;
-  final String time;
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({required this.icon, required this.label, required this.value});
+
+  final IconData icon;
+  final String label;
+  final String value;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.history),
-        title: Text('$origin  ->  $destination'),
-        subtitle: Text(time),
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 16, color: AppDesignTokens.brandStart),
+        const SizedBox(width: 5),
+        Text('$label: ', style: const TextStyle(fontWeight: FontWeight.w600)),
+        Text(value),
+      ],
     );
   }
 }

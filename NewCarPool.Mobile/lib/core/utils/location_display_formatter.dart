@@ -1,6 +1,17 @@
 import '../../models/ride_models.dart';
 
 class LocationDisplayFormatter {
+  static const Set<String> _genericParts = {
+    'india',
+    'united states',
+    'usa',
+    'bharat',
+    'madhya pradesh',
+    'maharashtra',
+    'gujarat',
+    'karnataka',
+  };
+
   static String title(dynamic location) {
     final map = _asMap(location);
     final direct = _firstNonEmpty([
@@ -8,7 +19,7 @@ class LocationDisplayFormatter {
       map?['main_text']?.toString(),
       map?['name']?.toString(),
     ]);
-    if (direct != null) return direct;
+    if (direct != null && !_isGeneric(direct)) return direct;
 
     final display = _firstNonEmpty([
       map?['secondaryText']?.toString(),
@@ -17,7 +28,12 @@ class LocationDisplayFormatter {
       map?['address']?.toString(),
     ]);
     if (display == null) return 'Location';
-    return _splitAddress(display).first;
+    final parts = _splitAddress(display);
+    if (parts.isEmpty) return 'Location';
+    for (final part in parts) {
+      if (!_isGeneric(part)) return part;
+    }
+    return parts.first;
   }
 
   static String subtitle(dynamic location) {
@@ -108,5 +124,13 @@ class LocationDisplayFormatter {
       }
     }
     return null;
+  }
+
+  static bool _isGeneric(String value) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) return true;
+    if (_genericParts.contains(normalized)) return true;
+    if (normalized.length <= 2) return true;
+    return false;
   }
 }
