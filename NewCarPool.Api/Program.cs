@@ -7,6 +7,7 @@ using NewCarPool.Api.Hubs;
 using NewCarPool.Api.Middleware;
 using NewCarPool.Infrastructure;
 using NewCarPool.Infrastructure.Data;
+using NewCarPool.Infrastructure.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -136,6 +137,6 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHealthChecks("/health");
 app.MapHub<TrackingHub>("/hubs/tracking");
-app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<AppRealtimeHub>("/hubs/notifications");
 
 app.Run();

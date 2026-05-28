@@ -5,6 +5,8 @@ using Microsoft.Extensions.Logging;
 using NewCarPool.Domain.Entities;
 using NewCarPool.Domain.Enums;
 using NewCarPool.Infrastructure.Data;
+using NewCarPool.Application.Interfaces.Services;
+using NewCarPool.Application.DTOs.Notifications;
 
 namespace NewCarPool.Infrastructure.Services;
 
@@ -43,6 +45,7 @@ public sealed class TripReminderBackgroundService : BackgroundService
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<NewCarPoolDbContext>();
+        var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
         var now = DateTime.UtcNow;
 
         foreach (var window in ReminderWindowsMinutes)
@@ -81,6 +84,7 @@ public sealed class TripReminderBackgroundService : BackgroundService
                     $"Your ride starts in {window} minutes. Route: {ShortName(ride.OriginName)} to {ShortName(ride.DestinationName)}.";
                 await CreateReminderIfMissingAsync(
                     db,
+                    notificationService,
                     ride.Id,
                     ride.DriverId,
                     window,
@@ -95,6 +99,7 @@ public sealed class TripReminderBackgroundService : BackgroundService
                         $"Your ride starts in {window} minutes. Pickup: {pickup}. Driver: {row.DriverName}.";
                     await CreateReminderIfMissingAsync(
                         db,
+                        notificationService,
                         ride.Id,
                         booking.PassengerId,
                         window,
@@ -110,6 +115,7 @@ public sealed class TripReminderBackgroundService : BackgroundService
 
     private static async Task CreateReminderIfMissingAsync(
         NewCarPoolDbContext db,
+        INotificationService notificationService,
         Guid rideId,
         Guid userId,
         int windowMinutes,
@@ -128,17 +134,10 @@ public sealed class TripReminderBackgroundService : BackgroundService
                 cancellationToken);
         if (exists) return;
 
-        db.Notifications.Add(new Notification
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            Title = title,
-            Message = message,
-            Type = NotificationType.TripReminder,
-            RideId = rideId,
-            IsRead = false,
-            CreatedAtUtc = DateTime.UtcNow
-        });
+        await notificationService.CreateAsync(
+            userId,
+            new CreateNotificationRequest(title, message, NotificationType.TripReminder, rideId, null),
+            cancellationToken);
     }
 
     private static string ShortName(string? value)

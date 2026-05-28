@@ -34,8 +34,20 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   void prependRealtime(AppNotification notification) {
-    notifications = [notification, ...notifications];
-    unreadCountValue += notification.isRead ? 0 : 1;
+    final existingIndex = notifications.indexWhere((x) => x.id == notification.id);
+    if (existingIndex >= 0) {
+      final copy = [...notifications];
+      copy[existingIndex] = notification;
+      notifications = copy;
+    } else {
+      notifications = [notification, ...notifications];
+    }
+    unreadCountValue = notifications.where((x) => !x.isRead).length;
+    notifyListeners();
+  }
+
+  void setUnreadCountRealtime(int count) {
+    unreadCountValue = count;
     notifyListeners();
   }
 
@@ -73,7 +85,7 @@ class NotificationProvider extends ChangeNotifier {
     return notifications.where((n) => n.kind == activeFilter).toList();
   }
 
-  void startUnreadAutoRefresh({Duration interval = const Duration(seconds: 15)}) {
+  void startUnreadAutoRefresh({Duration interval = const Duration(seconds: 45)}) {
     _unreadTimer?.cancel();
     _unreadTimer = Timer.periodic(interval, (_) => loadUnreadCount());
   }
@@ -83,7 +95,7 @@ class NotificationProvider extends ChangeNotifier {
     _unreadTimer = null;
   }
 
-  void startListAutoRefresh({Duration interval = const Duration(seconds: 15)}) {
+  void startListAutoRefresh({Duration interval = const Duration(seconds: 45)}) {
     _listTimer?.cancel();
     _listTimer = Timer.periodic(interval, (_) async {
       try {

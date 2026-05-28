@@ -41,7 +41,7 @@ class NewCarPoolApp extends StatelessWidget {
         Provider.value(value: dependencies.trackingService),
         Provider(create: (context) => RideChatService(context.read())),
         ChangeNotifierProvider(create: (_) => AuthProvider(dependencies.authService, dependencies.tokenStore)),
-        ChangeNotifierProvider(create: (_) => RideProvider(dependencies.rideService)),
+        ChangeNotifierProvider(create: (_) => RideProvider(dependencies.rideService, dependencies.tokenStore)),
         ChangeNotifierProvider(create: (_) => VehicleProvider(dependencies.vehicleService)),
         ChangeNotifierProvider(create: (_) => BookingProvider(dependencies.bookingService)),
         ChangeNotifierProvider(create: (_) => NotificationProvider(dependencies.notificationService)),

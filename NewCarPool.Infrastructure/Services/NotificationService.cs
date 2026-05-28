@@ -1,9 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.SignalR;
 using NewCarPool.Application.Common;
 using NewCarPool.Application.DTOs.Notifications;
 using NewCarPool.Application.Interfaces.Repositories;
 using NewCarPool.Application.Interfaces.Services;
 using NewCarPool.Domain.Entities;
+using NewCarPool.Infrastructure.Hubs;
 
 namespace NewCarPool.Infrastructure.Services;
 
@@ -11,11 +13,13 @@ public sealed class NotificationService : INotificationService
 {
     private readonly IGenericRepository<Notification> _notifications;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IHubContext<AppRealtimeHub> _hubContext;
 
-    public NotificationService(IGenericRepository<Notification> notifications, IUnitOfWork unitOfWork)
+    public NotificationService(IGenericRepository<Notification> notifications, IUnitOfWork unitOfWork, IHubContext<AppRealtimeHub> hubContext)
     {
         _notifications = notifications;
         _unitOfWork = unitOfWork;
+        _hubContext = hubContext;
     }
 
     public async Task<IReadOnlyList<NotificationDto>> GetMineAsync(Guid userId, CancellationToken cancellationToken) =>
@@ -40,7 +44,12 @@ public sealed class NotificationService : INotificationService
         };
         await _notifications.AddAsync(notification, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return Map(notification);
+        var dto = Map(notification);
+        await _hubContext.Clients.Group(AppRealtimeHub.UserGroupName(userId.ToString())).SendAsync("notificationReceived", dto, cancellationToken);
+        await _hubContext.Clients.Group(AppRealtimeHub.UserGroupName(userId.ToString())).SendAsync("NotificationCreated", dto, cancellationToken);
+        var unread = await UnreadCountAsync(userId, cancellationToken);
+        await _hubContext.Clients.Group(AppRealtimeHub.UserGroupName(userId.ToString())).SendAsync("UnreadCountChanged", unread, cancellationToken);
+        return dto;
     }
 
     public async Task MarkReadAsync(Guid userId, Guid notificationId, CancellationToken cancellationToken)
@@ -54,6 +63,8 @@ public sealed class NotificationService : INotificationService
         notification.IsRead = true;
         notification.ReadAtUtc = DateTime.UtcNow;
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        var unread = await UnreadCountAsync(userId, cancellationToken);
+        await _hubContext.Clients.Group(AppRealtimeHub.UserGroupName(userId.ToString())).SendAsync("UnreadCountChanged", unread, cancellationToken);
     }
 
     public async Task MarkAllReadAsync(Guid userId, CancellationToken cancellationToken)
@@ -69,6 +80,7 @@ public sealed class NotificationService : INotificationService
             notification.ReadAtUtc = now;
         }
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await _hubContext.Clients.Group(AppRealtimeHub.UserGroupName(userId.ToString())).SendAsync("UnreadCountChanged", 0, cancellationToken);
     }
 
     private static NotificationDto Map(Notification notification) =>

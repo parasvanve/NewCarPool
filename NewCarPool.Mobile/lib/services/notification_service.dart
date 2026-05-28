@@ -58,14 +58,27 @@ class NotificationService {
         .withAutomaticReconnect()
         .build();
 
-    _connection!.on('notificationReceived', (args) {
+    void handleNotificationPayload(List<Object?>? args) {
       if (args == null || args.isEmpty) return;
       final payload = Map<String, dynamic>.from(args.first as Map);
       onNotification(AppNotification.fromJson(payload));
-    });
+    }
+
+    _connection!.on('notificationReceived', handleNotificationPayload);
+    _connection!.on('NotificationCreated', handleNotificationPayload);
 
     await _connection!.start();
     await _connection!.invoke('JoinUserGroup', args: [userId]);
+  }
+
+  void onUnreadCountChanged(void Function(int count) onChanged) {
+    _connection?.on('UnreadCountChanged', (args) {
+      if (args == null || args.isEmpty) return;
+      final raw = args.first;
+      if (raw is num) {
+        onChanged(raw.toInt());
+      }
+    });
   }
 
   Future<void> disconnect() async {

@@ -2,9 +2,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using NewCarPool.Api.Extensions;
-using NewCarPool.Api.Hubs;
 using NewCarPool.Application.DTOs.Notifications;
 using NewCarPool.Application.Interfaces.Services;
+using NewCarPool.Infrastructure.Hubs;
 
 namespace NewCarPool.Api.Controllers;
 
@@ -14,9 +14,9 @@ namespace NewCarPool.Api.Controllers;
 public sealed class NotificationsController : ControllerBase
 {
     private readonly INotificationService _notificationService;
-    private readonly IHubContext<NotificationHub> _hubContext;
+    private readonly IHubContext<AppRealtimeHub> _hubContext;
 
-    public NotificationsController(INotificationService notificationService, IHubContext<NotificationHub> hubContext)
+    public NotificationsController(INotificationService notificationService, IHubContext<AppRealtimeHub> hubContext)
     {
         _notificationService = notificationService;
         _hubContext = hubContext;
@@ -35,7 +35,7 @@ public sealed class NotificationsController : ControllerBase
     {
         var userId = User.GetUserId();
         var notification = await _notificationService.CreateAsync(userId, request, cancellationToken);
-        await _hubContext.Clients.Group(NotificationHub.UserGroupName(userId.ToString())).SendAsync("notificationReceived", notification, cancellationToken);
+        await _hubContext.Clients.Group(AppRealtimeHub.UserGroupName(userId.ToString())).SendAsync("notificationReceived", notification, cancellationToken);
         return Ok(notification);
     }
 

@@ -1,20 +1,27 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:signalr_netcore/signalr_client.dart';
 
+import '../core/config/app_config.dart';
+import '../core/network/token_store.dart';
 import '../models/ride_models.dart';
 import '../models/booking_models.dart';
 import '../services/ride_service.dart';
 
 class RideProvider extends ChangeNotifier {
-  RideProvider(this._rideService);
+  RideProvider(this._rideService, this._tokenStore);
 
   final RideService _rideService;
+  final TokenStore _tokenStore;
   List<RideOffer> rides = [];
   List<RideOffer> myRides = [];
   List<RideOffer> get upcomingActiveRides => rides;
   bool isLoading = false;
   String? errorMessage;
   Timer? _refreshTimer;
+  HubConnection? _realtimeConnection;
+  bool _upcomingRequestInFlight = false;
+  bool _myRidesRequestInFlight = false;
   GeoPoint? _lastOrigin;
   GeoPoint? _lastDestination;
   int _lastSeats = 1;
@@ -45,6 +52,8 @@ class RideProvider extends ChangeNotifier {
   }
 
   Future<void> loadUpcomingActive() async {
+    if (_upcomingRequestInFlight) return;
+    _upcomingRequestInFlight = true;
     isLoading = true;
     errorMessage = null;
     notifyListeners();
@@ -54,12 +63,15 @@ class RideProvider extends ChangeNotifier {
       errorMessage = error.toString();
       rethrow;
     } finally {
+      _upcomingRequestInFlight = false;
       isLoading = false;
       notifyListeners();
     }
   }
 
   Future<void> loadMyRides() async {
+    if (_myRidesRequestInFlight) return;
+    _myRidesRequestInFlight = true;
     isLoading = true;
     errorMessage = null;
     notifyListeners();
@@ -69,6 +81,7 @@ class RideProvider extends ChangeNotifier {
       errorMessage = error.toString();
       rethrow;
     } finally {
+      _myRidesRequestInFlight = false;
       isLoading = false;
       notifyListeners();
     }
@@ -163,9 +176,58 @@ class RideProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> connectRealtime({String? userId}) async {
+    if (_realtimeConnection?.state == HubConnectionState.Connected) return;
+    final token = await _tokenStore.accessToken;
+    if (token == null) return;
+    _realtimeConnection = HubConnectionBuilder()
+        .withUrl(
+          '${AppConfig.apiBaseUrl}/hubs/notifications',
+          options: HttpConnectionOptions(accessTokenFactory: () async => token),
+        )
+        .withAutomaticReconnect()
+        .build();
+
+    _realtimeConnection!.on('RideCreated', (_) async {
+      await loadUpcomingActive();
+      if (userId != null && userId.isNotEmpty) {
+        await loadMyRides();
+      }
+    });
+    _realtimeConnection!.on('UpcomingRidesChanged', (_) async {
+      await loadUpcomingActive();
+      if (userId != null && userId.isNotEmpty) {
+        await loadMyRides();
+      }
+    });
+    await _realtimeConnection!.start();
+    if (userId != null && userId.isNotEmpty) {
+      await _realtimeConnection!.invoke('JoinUserGroup', args: [userId]);
+    }
+  }
+
+  Future<void> disconnectRealtime() async {
+    await _realtimeConnection?.stop();
+    _realtimeConnection = null;
+  }
+
+  void startUpcomingAutoRefresh({Duration interval = const Duration(seconds: 15)}) {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(interval, (_) async {
+      if (_upcomingRequestInFlight) return;
+      await loadUpcomingActive();
+    });
+  }
+
+  void stopUpcomingAutoRefresh() {
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
+  }
+
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _realtimeConnection?.stop();
     super.dispose();
   }
 }

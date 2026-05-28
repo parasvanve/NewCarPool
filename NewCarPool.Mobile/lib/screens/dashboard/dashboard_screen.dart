@@ -14,6 +14,7 @@ import '../../providers/booking_provider.dart';
 import '../../providers/notification_provider.dart';
 import '../../providers/profile_provider.dart';
 import '../../providers/ride_provider.dart';
+import '../../services/notification_service.dart';
 import '../notifications/notification_screen.dart';
 import '../profile/profile_screen.dart';
 import '../rides/offer_ride_form_screen.dart';
@@ -30,21 +31,57 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _index = 0;
+  bool _notificationRealtimeConnected = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<RideProvider>().loadUpcomingActive();
+      final auth = context.read<AuthProvider>();
+      final userId = auth.session?.userId;
+      final rideProvider = context.read<RideProvider>();
+      rideProvider.loadUpcomingActive();
+      if (userId != null && userId.isNotEmpty) {
+        rideProvider.connectRealtime(userId: userId);
+      }
+      rideProvider.startUpcomingAutoRefresh();
       context.read<NotificationProvider>().loadUnreadCount();
       context.read<NotificationProvider>().startUnreadAutoRefresh();
       context.read<BookingProvider>().loadHistory();
+      _connectNotificationRealtime();
     });
+  }
+
+  Future<void> _connectNotificationRealtime() async {
+    if (_notificationRealtimeConnected) return;
+    final profileProvider = context.read<ProfileProvider>();
+    if (profileProvider.profile == null) {
+      try {
+        await profileProvider.loadProfile();
+      } catch (_) {
+        return;
+      }
+    }
+    final userId = profileProvider.profile?.id;
+    if (userId == null || userId.isEmpty || !mounted) return;
+    final notificationService = context.read<NotificationService>();
+    await notificationService.connect(userId, (notification) {
+      if (!mounted) return;
+      context.read<NotificationProvider>().prependRealtime(notification);
+    });
+    notificationService.onUnreadCountChanged((count) {
+      if (!mounted) return;
+      context.read<NotificationProvider>().setUnreadCountRealtime(count);
+    });
+    _notificationRealtimeConnected = true;
   }
 
   @override
   void dispose() {
     context.read<NotificationProvider>().stopUnreadAutoRefresh();
+    context.read<RideProvider>().stopUpcomingAutoRefresh();
+    context.read<RideProvider>().disconnectRealtime();
+    context.read<NotificationService>().disconnect();
     super.dispose();
   }
 

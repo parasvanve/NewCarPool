@@ -41,10 +41,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
     await _connectRealtime();
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(
-      const Duration(seconds: 15),
+      const Duration(seconds: 45),
       (_) async {
         await context.read<NotificationProvider>().loadUnreadCount();
-        await context.read<NotificationProvider>().loadMine();
       },
     );
   }
@@ -66,6 +65,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
     await notificationService.connect(userId, (notification) {
       if (!mounted) return;
       context.read<NotificationProvider>().prependRealtime(notification);
+    });
+    notificationService.onUnreadCountChanged((count) {
+      if (!mounted) return;
+      context.read<NotificationProvider>().setUnreadCountRealtime(count);
     });
     _connected = true;
   }

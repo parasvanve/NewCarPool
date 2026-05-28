@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using NewCarPool.Api.Extensions;
 using NewCarPool.Application.Common;
 using NewCarPool.Application.DTOs.Rides;
 using NewCarPool.Application.Interfaces.Services;
+using NewCarPool.Infrastructure.Hubs;
 
 namespace NewCarPool.Api.Controllers;
 
@@ -13,12 +15,22 @@ namespace NewCarPool.Api.Controllers;
 public sealed class RidesController : ControllerBase
 {
     private readonly IRideService _rideService;
+    private readonly IHubContext<AppRealtimeHub> _hubContext;
 
-    public RidesController(IRideService rideService) => _rideService = rideService;
+    public RidesController(IRideService rideService, IHubContext<AppRealtimeHub> hubContext)
+    {
+        _rideService = rideService;
+        _hubContext = hubContext;
+    }
 
     [HttpPost("offer")]
-    public async Task<ActionResult<RideOfferDto>> Offer(CreateRideOfferRequest request, CancellationToken cancellationToken) =>
-        Ok(await _rideService.OfferRideAsync(User.GetUserId(), request, cancellationToken));
+    public async Task<ActionResult<RideOfferDto>> Offer(CreateRideOfferRequest request, CancellationToken cancellationToken)
+    {
+        var ride = await _rideService.OfferRideAsync(User.GetUserId(), request, cancellationToken);
+        await _hubContext.Clients.All.SendAsync("RideCreated", ride, cancellationToken);
+        await _hubContext.Clients.All.SendAsync("UpcomingRidesChanged", new { rideId = ride.Id }, cancellationToken);
+        return Ok(ride);
+    }
 
     [HttpGet("search")]
     public async Task<ActionResult<PagedResult<RideOfferDto>>> Search([FromQuery] SearchRideRequest request, CancellationToken cancellationToken) =>

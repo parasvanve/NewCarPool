@@ -35,7 +35,21 @@ class _TripsScreenState extends State<TripsScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshAll());
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final userId = context.read<AuthProvider>().session?.userId;
+      final rideProvider = context.read<RideProvider>();
+      if (userId != null && userId.isNotEmpty) {
+        await rideProvider.connectRealtime(userId: userId);
+      }
+      rideProvider.startUpcomingAutoRefresh();
+      await _refreshAll();
+    });
+  }
+
+  @override
+  void dispose() {
+    context.read<RideProvider>().stopUpcomingAutoRefresh();
+    super.dispose();
   }
 
   Future<void> _refreshAll() async {

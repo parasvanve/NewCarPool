@@ -22,6 +22,7 @@ public sealed class RideService : IRideService
     private readonly IUnitOfWork _unitOfWork;
     private readonly Data.NewCarPoolDbContext _dbContext;
     private readonly ILogger<RideService> _logger;
+    private readonly INotificationService _notificationService;
 
     public RideService(
         IRideRepository rides,
@@ -32,6 +33,7 @@ public sealed class RideService : IRideService
         IGenericRepository<RideChatMessage> chatMessages,
         Data.NewCarPoolDbContext dbContext,
         ILogger<RideService> logger,
+        INotificationService notificationService,
         IUnitOfWork unitOfWork)
     {
         _rides = rides;
@@ -42,6 +44,7 @@ public sealed class RideService : IRideService
         _chatMessages = chatMessages;
         _dbContext = dbContext;
         _logger = logger;
+        _notificationService = notificationService;
         _unitOfWork = unitOfWork;
     }
 
@@ -354,36 +357,31 @@ public sealed class RideService : IRideService
             var notificationMessage =
                 $"{passenger.FullName} booked your ride from {ShortLocationName(ride.OriginName)} to {ShortLocationName(ride.DestinationName)}. " +
                 $"Pickup: {ShortLocationName(booking.PassengerPickupName)}. Drop: {ShortLocationName(booking.PassengerDropName)}. Seats: {booking.SeatsBooked}.";
-            _dbContext.Notifications.Add(new Notification
-            {
-                Id = Guid.NewGuid(),
-                UserId = ride.DriverId,
-                Title = "New ride booking",
-                Message = Truncate(notificationMessage, 1000),
-                Type = NotificationType.RideBooked,
-                RideId = ride.Id,
-                BookingId = booking.Id,
-                CreatedAtUtc = DateTime.UtcNow
-            });
-            _dbContext.Notifications.Add(new Notification
-            {
-                Id = Guid.NewGuid(),
-                UserId = passengerId,
-                Title = "Ride booked successfully",
-                Message = Truncate(
-                    $"Your ride with {ride.Driver?.FullName ?? "Driver"} is confirmed. " +
-                    $"Pickup: {ShortLocationName(booking.PassengerPickupName)}. " +
-                    $"Drop: {ShortLocationName(booking.PassengerDropName)}. Seats: {booking.SeatsBooked}.",
-                    1000),
-                Type = NotificationType.BookingConfirmed,
-                RideId = ride.Id,
-                BookingId = booking.Id,
-                CreatedAtUtc = DateTime.UtcNow
-            });
-
             await _unitOfWork.SaveChangesAsync(cancellationToken);
             await EnsureRideChatGroupAsync(ride.Id, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            await _notificationService.CreateAsync(
+                ride.DriverId,
+                new Application.DTOs.Notifications.CreateNotificationRequest(
+                    "New ride booking",
+                    Truncate(notificationMessage, 1000),
+                    NotificationType.RideBooked,
+                    ride.Id,
+                    booking.Id),
+                cancellationToken);
+            await _notificationService.CreateAsync(
+                passengerId,
+                new Application.DTOs.Notifications.CreateNotificationRequest(
+                    "Ride booked successfully",
+                    Truncate(
+                        $"Your ride with {ride.Driver?.FullName ?? "Driver"} is confirmed. " +
+                        $"Pickup: {ShortLocationName(booking.PassengerPickupName)}. " +
+                        $"Drop: {ShortLocationName(booking.PassengerDropName)}. Seats: {booking.SeatsBooked}.",
+                        1000),
+                    NotificationType.BookingConfirmed,
+                    ride.Id,
+                    booking.Id),
+                cancellationToken);
             booking.Passenger = passenger;
             return MapBooking(booking);
         }
@@ -476,20 +474,15 @@ public sealed class RideService : IRideService
             .ToList();
         foreach (var recipientId in recipients)
         {
-            _dbContext.Notifications.Add(new Notification
-            {
-                Id = Guid.NewGuid(),
-                UserId = recipientId,
-                Title = $"New message from {sender.FullName}",
-                Message = Truncate(request.Message.Trim(), 300),
-                Type = NotificationType.NewMessage,
-                RideId = rideOfferId,
-                CreatedAtUtc = nowUtc
-            });
-        }
-        if (recipients.Count > 0)
-        {
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _notificationService.CreateAsync(
+                recipientId,
+                new Application.DTOs.Notifications.CreateNotificationRequest(
+                    $"New message from {sender.FullName}",
+                    Truncate(request.Message.Trim(), 300),
+                    NotificationType.NewMessage,
+                    rideOfferId,
+                    null),
+                cancellationToken);
         }
         return new RideChatMessageDto(message.Id, rideOfferId, userId, sender.FullName, message.Message, NormalizeToUtc(message.CreatedAtUtc));
     }
