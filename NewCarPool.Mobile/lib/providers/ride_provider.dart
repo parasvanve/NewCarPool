@@ -10,6 +10,7 @@ class RideProvider extends ChangeNotifier {
 
   final RideService _rideService;
   List<RideOffer> rides = [];
+  List<RideOffer> myRides = [];
   List<RideOffer> get upcomingActiveRides => rides;
   bool isLoading = false;
   String? errorMessage;
@@ -49,6 +50,21 @@ class RideProvider extends ChangeNotifier {
     notifyListeners();
     try {
       rides = await _rideService.upcomingActiveRides();
+    } catch (error) {
+      errorMessage = error.toString();
+      rethrow;
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadMyRides() async {
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      myRides = await _rideService.myRides();
     } catch (error) {
       errorMessage = error.toString();
       rethrow;

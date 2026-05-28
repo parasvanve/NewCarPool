@@ -1,3 +1,5 @@
+import '../core/utils/app_date_formatter.dart';
+
 class RideChatMessage {
   const RideChatMessage({
     required this.id,
@@ -21,6 +23,6 @@ class RideChatMessage {
         senderUserId: json['senderUserId']?.toString() ?? '',
         senderName: json['senderName']?.toString() ?? 'User',
         message: json['message']?.toString() ?? '',
-        createdAtUtc: DateTime.tryParse(json['createdAtUtc']?.toString() ?? '') ?? DateTime.now().toUtc(),
+        createdAtUtc: parseUtcToLocal(json['createdAtUtc']?.toString() ?? '').toUtc(),
       );
 }

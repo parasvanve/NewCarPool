@@ -77,7 +77,9 @@ class _HomeTab extends StatelessWidget {
     final auth = context.watch<AuthProvider>();
     final profile = context.watch<ProfileProvider>().profile;
     final rideProvider = context.watch<RideProvider>();
+    final nowUtc = DateTime.now().toUtc();
     final rides = List<RideOffer>.from(rideProvider.upcomingActiveRides)
+      ..retainWhere((r) => r.departureTimeUtc.isAfter(nowUtc) && r.status == 1 && r.availableSeats > 0)
       ..sort((a, b) => a.departureTimeUtc.compareTo(b.departureTimeUtc));
     final bookings = context.watch<BookingProvider>().bookings;
 
@@ -147,92 +149,185 @@ class _HomeTab extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 8),
-        if (rideProvider.isLoading && rides.isEmpty)
-          const Center(child: CircularProgressIndicator())
-        else if (rides.isEmpty)
-          const Card(
-            child: Padding(
-              padding: EdgeInsets.all(20),
-              child: Text('No upcoming rides yet. Search rides and book your next trip.'),
-            ),
+        if (isWide)
+          Expanded(
+            child: rideProvider.isLoading && rides.isEmpty
+                ? const Center(child: CircularProgressIndicator())
+                : rides.isEmpty
+                    ? const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text('No upcoming rides yet. Search rides and book your next trip.'),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: rides.length,
+                        itemBuilder: (_, index) {
+                          final ride = rides[index];
+                          final booking = bookedByRide[ride.id];
+                          final isDriver = myUserId != null && ride.driverId == myUserId;
+                          final isBooked = booking != null;
+                          return Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: _DashboardRideCard(
+                              ride: ride,
+                              booking: booking,
+                              isDriver: isDriver,
+                              isBooked: isBooked,
+                            ),
+                          );
+                        },
+                      ),
           )
-        else
-          ...rides.take(4).map((ride) {
-            final booking = bookedByRide[ride.id];
-            final isDriver = myUserId != null && ride.driverId == myUserId;
-            final isBooked = booking != null;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _DashboardRideCard(
-                ride: ride,
-                booking: booking,
-                isDriver: isDriver,
-                isBooked: isBooked,
+        else ...[
+          if (rideProvider.isLoading && rides.isEmpty)
+            const Center(child: CircularProgressIndicator())
+          else if (rides.isEmpty)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(20),
+                child: Text('No upcoming rides yet. Search rides and book your next trip.'),
               ),
-            );
-          }),
+            )
+          else
+            ...rides.map((ride) {
+              final booking = bookedByRide[ride.id];
+              final isDriver = myUserId != null && ride.driverId == myUserId;
+              final isBooked = booking != null;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _DashboardRideCard(
+                  ride: ride,
+                  booking: booking,
+                  isDriver: isDriver,
+                  isBooked: isBooked,
+                ),
+              );
+            }),
+        ],
       ],
     );
 
-    return CustomScrollView(
-      slivers: [
-        SliverAppBar(
-          pinned: true,
-          backgroundColor: Colors.white,
-          title: const Text('Home', style: TextStyle(fontWeight: FontWeight.w700)),
-          actions: [
-            IconButton(
-              onPressed: () => context.push(AppRoutes.notifications),
-              icon: Stack(
-                clipBehavior: Clip.none,
+    if (!isWide) {
+      return CustomScrollView(
+        slivers: [
+          _HomeAppBar(unreadCount: unreadCount),
+          SliverPadding(
+            padding: const EdgeInsets.all(12),
+            sliver: SliverToBoxAdapter(
+              child: Column(
                 children: [
-                  const Icon(Icons.notifications_none_rounded),
-                  if (unreadCount > 0)
-                    Positioned(
-                      right: -2,
-                      top: -2,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: Colors.red,
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        constraints: const BoxConstraints(minWidth: 16),
-                        child: Text(
-                          unreadCount > 99 ? '99+' : '$unreadCount',
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ),
+                  leftPanel,
+                  const SizedBox(height: 12),
+                  rightPanel,
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-          ],
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.all(12),
-          sliver: SliverToBoxAdapter(
-            child: isWide
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 5, child: leftPanel),
-                      const SizedBox(width: 14),
-                      Expanded(flex: 5, child: rightPanel),
-                    ],
-                  )
-                : Column(
-                    children: [
-                      leftPanel,
-                      const SizedBox(height: 12),
-                      rightPanel,
-                    ],
-                  ),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      children: [
+        _HomeTopBar(unreadCount: unreadCount),
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: SingleChildScrollView(child: leftPanel),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  flex: 5,
+                  child: rightPanel,
+                ),
+              ],
+            ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _HomeAppBar extends StatelessWidget {
+  const _HomeAppBar({required this.unreadCount});
+
+  final int unreadCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return SliverAppBar(
+      pinned: true,
+      backgroundColor: Colors.white,
+      title: const Text('Home', style: TextStyle(fontWeight: FontWeight.w700)),
+      actions: [_NotificationIcon(unreadCount: unreadCount), const SizedBox(width: 8)],
+    );
+  }
+}
+
+class _HomeTopBar extends StatelessWidget {
+  const _HomeTopBar({required this.unreadCount});
+
+  final int unreadCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.white,
+      height: kToolbarHeight,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      child: Row(
+        children: [
+          const SizedBox(width: 8),
+          const Text('Home', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20)),
+          const Spacer(),
+          _NotificationIcon(unreadCount: unreadCount),
+          const SizedBox(width: 8),
+        ],
+      ),
+    );
+  }
+}
+
+class _NotificationIcon extends StatelessWidget {
+  const _NotificationIcon({required this.unreadCount});
+
+  final int unreadCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      onPressed: () => context.push(AppRoutes.notifications),
+      icon: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(Icons.notifications_none_rounded),
+          if (unreadCount > 0)
+            Positioned(
+              right: -2,
+              top: -2,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                constraints: const BoxConstraints(minWidth: 16),
+                child: Text(
+                  unreadCount > 99 ? '99+' : '$unreadCount',
+                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -434,10 +529,10 @@ class _WhyCarpoolCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final items = [
-      (Icons.account_balance_wallet_outlined, 'Save Money', 'Share ride & save more', Color(0xFF22C55E)),
-      (Icons.eco_outlined, 'Eco Friendly', 'Reduce carbon emissions', Color(0xFF16A34A)),
-      (Icons.shield_outlined, 'Safe & Secure', 'Verified users & safe rides', Color(0xFF4F46E5)),
-      (Icons.schedule_outlined, 'On Time', 'Reach on time, every time', Color(0xFFF59E0B)),
+      (Icons.account_balance_wallet_outlined, 'Save Money', 'Share rides and save on travel', Color(0xFF22C55E)),
+      (Icons.verified_user_outlined, 'Verified Users', 'All users are verified for your safety', Color(0xFF4F46E5)),
+      (Icons.location_searching_outlined, 'Live Tracking', 'Track rides in real-time', Color(0xFF06B6D4)),
+      (Icons.touch_app_outlined, 'Easy Booking', 'Book rides in just a few taps', Color(0xFFF59E0B)),
     ];
 
     return Card(
@@ -447,7 +542,7 @@ class _WhyCarpoolCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Why carpool with us?', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+            const Text('Why NewCarPool?', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             Wrap(
               spacing: 12,

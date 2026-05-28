@@ -9,6 +9,7 @@ public interface IRideService
     Task<RideOfferDto> DetailsAsync(Guid rideOfferId, CancellationToken cancellationToken);
     Task<PagedResult<RideOfferDto>> SearchAsync(SearchRideRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyList<RideOfferDto>> UpcomingActiveRidesAsync(CancellationToken cancellationToken);
+    Task<IReadOnlyList<RideOfferDto>> MineAsync(Guid userId, CancellationToken cancellationToken);
     Task<RideOfferDto> UpdateRideAsync(Guid driverId, Guid rideOfferId, CreateRideOfferRequest request, CancellationToken cancellationToken);
     Task DeleteRideAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken);
     Task<RideOfferDto> CancelRideAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken);

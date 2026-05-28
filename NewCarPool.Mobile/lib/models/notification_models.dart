@@ -1,4 +1,6 @@
-﻿class AppNotification {
+import '../core/utils/app_date_formatter.dart';
+
+class AppNotification {
   const AppNotification({
     required this.id,
     required this.title,
@@ -27,8 +29,7 @@
         rideId: json['rideId']?.toString(),
         bookingId: json['bookingId']?.toString(),
         isRead: json['isRead'] == true,
-        createdAtUtc:
-            DateTime.tryParse(json['createdAtUtc']?.toString() ?? '') ?? DateTime.now().toUtc(),
+        createdAtUtc: parseUtcToLocal(json['createdAtUtc']?.toString() ?? '').toUtc(),
       );
 
   AppNotification copyWith({bool? isRead}) => AppNotification(

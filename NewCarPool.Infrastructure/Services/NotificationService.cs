@@ -26,6 +26,7 @@ public sealed class NotificationService : INotificationService
 
     public async Task<NotificationDto> CreateAsync(Guid userId, CreateNotificationRequest request, CancellationToken cancellationToken)
     {
+        var nowUtc = DateTime.UtcNow;
         var notification = new Notification
         {
             Id = Guid.NewGuid(),
@@ -34,7 +35,8 @@ public sealed class NotificationService : INotificationService
             Message = request.Message.Trim(),
             Type = request.Type,
             RideId = request.RideId,
-            BookingId = request.BookingId
+            BookingId = request.BookingId,
+            CreatedAtUtc = nowUtc
         };
         await _notifications.AddAsync(notification, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -78,5 +80,14 @@ public sealed class NotificationService : INotificationService
             notification.RideId,
             notification.BookingId,
             notification.IsRead,
-            notification.CreatedAtUtc);
+            NormalizeToUtc(notification.CreatedAtUtc));
+
+    private static DateTime NormalizeToUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            DateTimeKind.Unspecified => DateTime.SpecifyKind(value, DateTimeKind.Utc),
+            _ => value.ToUniversalTime()
+        };
 }

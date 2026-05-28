@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/widgets/app_design_system.dart';
+import '../../core/utils/app_date_formatter.dart';
 import '../../models/notification_models.dart';
 import '../../providers/notification_provider.dart';
 import '../../providers/profile_provider.dart';
@@ -242,14 +243,7 @@ class _NotificationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = _style(item.kind, item.typeCode);
-    final elapsed = DateTime.now().toUtc().difference(item.createdAtUtc);
-    final timeAgo = elapsed.inMinutes < 1
-        ? 'just now'
-        : elapsed.inMinutes < 60
-            ? '${elapsed.inMinutes} min ago'
-            : elapsed.inHours < 24
-                ? '${elapsed.inHours} hr ago'
-                : '${elapsed.inDays} day ago';
+    final timeAgoText = timeAgo(item.createdAtUtc);
 
     return Card(
       elevation: 0,
@@ -293,7 +287,7 @@ class _NotificationCard extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(timeAgo, style: const TextStyle(color: Color(0xFF667085))),
+                      Text(timeAgoText, style: const TextStyle(color: Color(0xFF667085))),
                       const SizedBox(height: 4),
                       if (!item.isRead)
                         const CircleAvatar(radius: 4, backgroundColor: Color(0xFF3450F7)),

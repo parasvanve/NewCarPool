@@ -1,6 +1,7 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/utils/app_date_formatter.dart';
 import '../../models/notification_models.dart';
 import '../../providers/notification_provider.dart';
 import '../../services/ride_service.dart';
@@ -17,13 +18,7 @@ class NotificationDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final t = notification.createdAtUtc.toLocal();
-    final minute = t.minute.toString().padLeft(2, '0');
-    final hour24 = t.hour;
-    final hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12;
-    final meridian = hour24 < 12 ? 'AM' : 'PM';
-    final dateText = 'Today, ${hour12.toString().padLeft(2, '0')}:$minute $meridian';
-
+    final dateText = notificationDetailsTime(notification.createdAtUtc);
     final style = _style(notification);
 
     return Scaffold(

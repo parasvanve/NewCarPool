@@ -150,6 +150,19 @@ public sealed class RideService : IRideService
         return rides.Select(MapRide).ToList();
     }
 
+    public async Task<IReadOnlyList<RideOfferDto>> MineAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var rides = await _rideOffers.Query()
+            .AsNoTracking()
+            .Include(x => x.Driver)
+            .Include(x => x.Bookings)
+            .Include(x => x.IntermediateStops)
+            .Where(x => x.DriverId == userId)
+            .OrderByDescending(x => x.DepartureTimeUtc)
+            .ToListAsync(cancellationToken);
+        return rides.Select(MapRide).ToList();
+    }
+
     public async Task<RideOfferDto> DetailsAsync(Guid rideOfferId, CancellationToken cancellationToken) =>
         MapRide(await _rides.GetRideByIdAsync(rideOfferId, cancellationToken) ?? throw new ApiException("Ride not found.", 404));
 
@@ -422,7 +435,7 @@ public sealed class RideService : IRideService
             m.SenderUserId,
             m.SenderUser.FullName,
             m.Message,
-            m.CreatedAtUtc)).ToList();
+            NormalizeToUtc(m.CreatedAtUtc))).ToList();
     }
 
     public async Task<RideChatMessageDto> SendRideChatMessageAsync(Guid userId, Guid rideOfferId, SendRideChatMessageRequest request, CancellationToken cancellationToken)
@@ -435,12 +448,14 @@ public sealed class RideService : IRideService
         var sender = await _users.GetByIdAsync(userId, cancellationToken) ?? throw new ApiException("User not found.", 404);
         await EnsureRideAccessAsync(userId, rideOfferId, cancellationToken);
         var group = await EnsureRideChatGroupAsync(rideOfferId, cancellationToken);
+        var nowUtc = DateTime.UtcNow;
         var message = new RideChatMessage
         {
             Id = Guid.NewGuid(),
             RideChatGroupId = group.Id,
             SenderUserId = userId,
-            Message = request.Message.Trim()
+            Message = request.Message.Trim(),
+            CreatedAtUtc = nowUtc
         };
         await _chatMessages.AddAsync(message, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -469,14 +484,14 @@ public sealed class RideService : IRideService
                 Message = Truncate(request.Message.Trim(), 300),
                 Type = NotificationType.NewMessage,
                 RideId = rideOfferId,
-                CreatedAtUtc = DateTime.UtcNow
+                CreatedAtUtc = nowUtc
             });
         }
         if (recipients.Count > 0)
         {
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
-        return new RideChatMessageDto(message.Id, rideOfferId, userId, sender.FullName, message.Message, message.CreatedAtUtc);
+        return new RideChatMessageDto(message.Id, rideOfferId, userId, sender.FullName, message.Message, NormalizeToUtc(message.CreatedAtUtc));
     }
 
     public Task<RideOfferDto> StartRideAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken) =>
