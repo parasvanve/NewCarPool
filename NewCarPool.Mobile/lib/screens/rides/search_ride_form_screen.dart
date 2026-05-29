@@ -22,6 +22,8 @@ class SearchRideFormScreen extends StatefulWidget {
   State<SearchRideFormScreen> createState() => _SearchRideFormScreenState();
 }
 
+enum _SearchMapPickField { pickup, destination }
+
 class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _pickupController = TextEditingController();
@@ -54,6 +56,7 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
   double? _distanceKm;
   int? _etaMinutes;
   String? _routeWarning;
+  _SearchMapPickField _activeField = _SearchMapPickField.destination;
 
   Timer? _searchDebounce;
   int _searchRequestId = 0;
@@ -211,11 +214,8 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
       (suggestion['longitude'] as num).toDouble(),
     );
 
+    _applySelectionToActiveField(point, suggestion);
     setState(() {
-      _dropLatLng = point;
-      _destinationSelection = suggestion;
-      _destinationController.text =
-          suggestion['formattedAddress']?.toString() ?? 'Pinned location';
       _showSuggestions = false;
       _searchSuggestions = const [];
       _suppressSearchOnChanged = true;
@@ -252,18 +252,57 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
     });
   }
 
-  Future<void> _setDestinationFromMap(LatLng point) async {
-    setState(() {
-      _dropLatLng = point;
-      _destinationController.text =
-          'Pinned (${point.latitude.toStringAsFixed(4)}, ${point.longitude.toStringAsFixed(4)})';
-      _showSuggestions = false;
-    });
+  Future<void> _setPointFromMap(LatLng point) async {
+    final suggestion = await _reverseSuggestion(point);
+    _applySelectionToActiveField(point, suggestion);
+    if (!mounted) return;
+    setState(() => _showSuggestions = false);
     await _loadRoutePreview();
   }
 
+  void _applySelectionToActiveField(LatLng point, Map<String, dynamic> suggestion) {
+    final formattedAddress =
+        suggestion['formattedAddress']?.toString() ?? suggestion['displayName']?.toString() ?? 'Pinned location';
+    setState(() {
+      if (_activeField == _SearchMapPickField.pickup) {
+        _pickupLatLng = point;
+        _pickupSelection = suggestion;
+        _pickupController.text = formattedAddress;
+      } else {
+        _dropLatLng = point;
+        _destinationSelection = suggestion;
+        _destinationController.text = formattedAddress;
+      }
+    });
+  }
+
+  Future<Map<String, dynamic>> _reverseSuggestion(LatLng point) async {
+    String fullAddress = 'Pinned location';
+    try {
+      fullAddress = await context.read<MapService>().reverseGeocode(
+            latitude: point.latitude,
+            longitude: point.longitude,
+          );
+    } catch (_) {}
+    return LocationDisplayFormatter.fromSearchSuggestion({
+      'displayName': fullAddress,
+      'formattedAddress': fullAddress,
+      'latitude': point.latitude,
+      'longitude': point.longitude,
+    });
+  }
+
   Future<void> _loadRoutePreview() async {
-    if (_pickupLatLng == null || _dropLatLng == null) return;
+    if (_pickupLatLng == null || _dropLatLng == null) {
+      if (!mounted) return;
+      setState(() {
+        _routePolylinePoints = const [];
+        _distanceKm = null;
+        _etaMinutes = null;
+        _routeWarning = null;
+      });
+      return;
+    }
     if (_isSamePoint(_pickupLatLng!, _dropLatLng!)) {
       setState(() {
         _routePolylinePoints = const [];
@@ -451,6 +490,28 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
     );
   }
 
+  Future<void> _clearPickup() async {
+    setState(() {
+      _pickupLatLng = null;
+      _pickupSelection = null;
+      _pickupController.clear();
+      _activeField = _SearchMapPickField.pickup;
+      _routeWarning = null;
+    });
+    await _loadRoutePreview();
+  }
+
+  Future<void> _clearDestination() async {
+    setState(() {
+      _dropLatLng = null;
+      _destinationSelection = null;
+      _destinationController.clear();
+      _activeField = _SearchMapPickField.destination;
+      _routeWarning = null;
+    });
+    await _loadRoutePreview();
+  }
+
   @override
   Widget build(BuildContext context) {
     const accent = AppDesignTokens.brandStart;
@@ -487,6 +548,7 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
                   TextFormField(
                     controller: _pickupController,
                     readOnly: true,
+                    onTap: () => setState(() => _activeField = _SearchMapPickField.pickup),
                     decoration: InputDecoration(
                       labelText: 'Pickup Location',
                       prefixIcon:
@@ -501,9 +563,20 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
                                     CircularProgressIndicator(strokeWidth: 2),
                               ),
                             )
-                          : IconButton(
-                              icon: const Icon(Icons.refresh),
-                              onPressed: _determineCurrentLocation,
+                          : Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (_pickupLatLng != null)
+                                  IconButton(
+                                    tooltip: 'Clear pickup',
+                                    icon: const Icon(Icons.close),
+                                    onPressed: _clearPickup,
+                                  ),
+                                IconButton(
+                                  icon: const Icon(Icons.refresh),
+                                  onPressed: _determineCurrentLocation,
+                                ),
+                              ],
                             ),
                       border: const OutlineInputBorder(),
                     ),
@@ -520,7 +593,7 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
                           focusNode: _searchFocusNode,
                           textInputAction: TextInputAction.search,
                           decoration: InputDecoration(
-                            labelText: 'Search Destination',
+                            labelText: _activeField == _SearchMapPickField.pickup ? 'Search Pickup' : 'Search Destination',
                             hintText: 'Type area/city',
                             prefixIcon:
                                 const Icon(Icons.search, color: Colors.orange),
@@ -645,14 +718,38 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
                   TextFormField(
                     controller: _destinationController,
                     readOnly: true,
-                    decoration: const InputDecoration(
+                    onTap: () => setState(() => _activeField = _SearchMapPickField.destination),
+                    decoration: InputDecoration(
                       labelText: 'Destination',
                       hintText: 'Tap map or use search',
-                      prefixIcon: Icon(Icons.location_on, color: Colors.red),
-                      border: OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.location_on, color: Colors.red),
+                      suffixIcon: _dropLatLng == null
+                          ? null
+                          : IconButton(
+                              tooltip: 'Clear destination',
+                              icon: const Icon(Icons.close),
+                              onPressed: _clearDestination,
+                            ),
+                      border: const OutlineInputBorder(),
                     ),
                     validator: (_) =>
                         _dropLatLng == null ? 'Destination required' : null,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Pickup'),
+                        selected: _activeField == _SearchMapPickField.pickup,
+                        onSelected: (_) => setState(() => _activeField = _SearchMapPickField.pickup),
+                      ),
+                      ChoiceChip(
+                        label: const Text('Destination'),
+                        selected: _activeField == _SearchMapPickField.destination,
+                        onSelected: (_) => setState(() => _activeField = _SearchMapPickField.destination),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Row(
@@ -783,7 +880,7 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
                               onCameraMove: (position) => _mapZoom = position.zoom,
                               minMaxZoomPreference:
                                   const gmap.MinMaxZoomPreference(4, 18),
-                              onTap: (point) => _setDestinationFromMap(
+                              onTap: (point) => _setPointFromMap(
                                 LatLng(point.latitude, point.longitude),
                               ),
                               markers: {
@@ -794,6 +891,9 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
                                       _pickupLatLng!.latitude,
                                       _pickupLatLng!.longitude,
                                     ),
+                                    icon: gmap.BitmapDescriptor.defaultMarkerWithHue(
+                                      gmap.BitmapDescriptor.hueGreen,
+                                    ),
                                   ),
                                 if (_dropLatLng != null)
                                   gmap.Marker(
@@ -801,6 +901,9 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
                                     position: gmap.LatLng(
                                       _dropLatLng!.latitude,
                                       _dropLatLng!.longitude,
+                                    ),
+                                    icon: gmap.BitmapDescriptor.defaultMarkerWithHue(
+                                      gmap.BitmapDescriptor.hueRed,
                                     ),
                                   ),
                                 ...nearbyRides.map(

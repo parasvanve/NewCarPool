@@ -25,6 +25,8 @@ class OfferRideFormScreen extends StatefulWidget {
   State<OfferRideFormScreen> createState() => _OfferRideFormScreenState();
 }
 
+enum _OfferMapPickMode { pickup, destination, stop }
+
 class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
   static const _accent = AppDesignTokens.brandStart;
 
@@ -46,6 +48,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
   String? _destinationAddress;
   Map<String, dynamic>? _pickupSelection;
   Map<String, dynamic>? _destinationSelection;
+  _OfferMapPickMode _mapPickMode = _OfferMapPickMode.pickup;
 
   @override
   void initState() {
@@ -229,6 +232,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
     _pickupCtrl.text =
         selected['formattedAddress']?.toString() ?? route.pickupAddress;
     _moveMap(point, 14.3);
+    setState(() => _mapPickMode = _OfferMapPickMode.pickup);
   }
 
   Future<void> _pickDestination() async {
@@ -241,6 +245,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
     _destCtrl.text = selected['formattedAddress']?.toString() ?? 'Destination';
     _destinationAddress = _destCtrl.text;
     _moveMap(point, 14.3);
+    setState(() => _mapPickMode = _OfferMapPickMode.destination);
   }
 
   Future<void> _pickStop({int? index}) async {
@@ -253,6 +258,75 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
     final stop = RideStop(name: name, address: address, latitude: point.latitude, longitude: point.longitude, order: (index ?? route.stops.length) + 1);
     final message = index == null ? await route.addStop(stop) : await route.updateStop(index, stop);
     if (message != null) _showInlineWarning(message);
+    if (message == null && mounted) {
+      setState(() => _mapPickMode = _OfferMapPickMode.stop);
+    }
+  }
+
+  Future<void> _applyMapSelection(LatLng point) async {
+    final route = context.read<OfferRideProvider>();
+    switch (_mapPickMode) {
+      case _OfferMapPickMode.pickup:
+        if (route.destination != null && _isSamePoint(point, route.destination!)) {
+          _showInlineWarning('Pickup and destination cannot be same.');
+          return;
+        }
+        await route.setPickup(point);
+        final suggestion = await _reverseSuggestion(point);
+        _pickupSelection = suggestion;
+        _pickupCtrl.text = suggestion['formattedAddress']?.toString() ?? route.pickupAddress;
+        break;
+      case _OfferMapPickMode.destination:
+        if (route.pickup != null && _isSamePoint(point, route.pickup!)) {
+          _showInlineWarning('Pickup and destination cannot be same.');
+          return;
+        }
+        await route.setDestination(point);
+        final suggestion = await _reverseSuggestion(point);
+        _destinationSelection = suggestion;
+        _destCtrl.text = suggestion['formattedAddress']?.toString() ?? 'Destination';
+        _destinationAddress = _destCtrl.text;
+        break;
+      case _OfferMapPickMode.stop:
+        final suggestion = await _reverseSuggestion(point);
+        final stopName = LocationDisplayFormatter.title(suggestion);
+        final stopAddress = suggestion['formattedAddress']?.toString() ?? stopName;
+        final stop = RideStop(
+          name: stopName,
+          address: stopAddress,
+          latitude: point.latitude,
+          longitude: point.longitude,
+          order: route.stops.length + 1,
+        );
+        final message = await route.addStop(stop);
+        if (message != null) {
+          _showInlineWarning(message);
+          return;
+        }
+        break;
+    }
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<Map<String, dynamic>> _reverseSuggestion(LatLng point) async {
+    String fullAddress = 'Selected location';
+    try {
+      fullAddress = await context.read<MapService>().reverseGeocode(
+            latitude: point.latitude,
+            longitude: point.longitude,
+          );
+    } catch (_) {}
+    return LocationDisplayFormatter.fromSearchSuggestion({
+      'displayName': fullAddress,
+      'formattedAddress': fullAddress,
+      'latitude': point.latitude,
+      'longitude': point.longitude,
+    });
+  }
+
+  bool _isSamePoint(LatLng a, LatLng b) {
+    return (a.latitude - b.latitude).abs() < 0.0001 && (a.longitude - b.longitude).abs() < 0.0001;
   }
 
   Future<void> _openStopsSheet() async {
@@ -569,21 +643,50 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                 markerId: const gmap.MarkerId('pickup'),
                 position: gmap.LatLng(route.pickup!.latitude, route.pickup!.longitude),
                 icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueGreen),
+                zIndexInt: _mapPickMode == _OfferMapPickMode.pickup ? 3 : 1,
               ),
             if (route.destination != null)
               gmap.Marker(
                 markerId: const gmap.MarkerId('destination'),
                 position: gmap.LatLng(route.destination!.latitude, route.destination!.longitude),
                 icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueRed),
+                zIndexInt: _mapPickMode == _OfferMapPickMode.destination ? 3 : 1,
               ),
             ...route.stops.asMap().entries.map((e) => gmap.Marker(
                   markerId: gmap.MarkerId('stop-${e.key}'),
                   position: gmap.LatLng(e.value.latitude, e.value.longitude),
                   infoWindow: gmap.InfoWindow(title: 'Drop ${e.key + 1}', snippet: e.value.name),
                   icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueAzure),
+                  zIndexInt: _mapPickMode == _OfferMapPickMode.stop ? 3 : 1,
                 )),
           },
+          onTap: (p) => _applyMapSelection(LatLng(p.latitude, p.longitude)),
           polylines: const {},
+        ),
+        Positioned(
+          top: 12,
+          left: 12,
+          right: 12,
+          child: Wrap(
+            spacing: 8,
+            children: [
+              ChoiceChip(
+                label: const Text('Pickup'),
+                selected: _mapPickMode == _OfferMapPickMode.pickup,
+                onSelected: (_) => setState(() => _mapPickMode = _OfferMapPickMode.pickup),
+              ),
+              ChoiceChip(
+                label: const Text('Destination'),
+                selected: _mapPickMode == _OfferMapPickMode.destination,
+                onSelected: (_) => setState(() => _mapPickMode = _OfferMapPickMode.destination),
+              ),
+              ChoiceChip(
+                label: const Text('Stop'),
+                selected: _mapPickMode == _OfferMapPickMode.stop,
+                onSelected: (_) => setState(() => _mapPickMode = _OfferMapPickMode.stop),
+              ),
+            ],
+          ),
         ),
         Positioned(
           right: 12,

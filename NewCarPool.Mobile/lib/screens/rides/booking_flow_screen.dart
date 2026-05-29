@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' as gmap;
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/errors/app_exception.dart';
@@ -21,16 +25,25 @@ class BookingFlowScreen extends StatefulWidget {
   State<BookingFlowScreen> createState() => _BookingFlowScreenState();
 }
 
+enum _BookingMapPickMode { pickup, drop }
+
 class _BookingFlowScreenState extends State<BookingFlowScreen> {
   int _seats = 1;
   bool _submitting = false;
   GeoPoint? _pickupPoint;
   GeoPoint? _dropPoint;
+  _BookingMapPickMode _mapPickMode = _BookingMapPickMode.pickup;
+  final Completer<gmap.GoogleMapController> _mapController = Completer();
+  LatLng _mapCenter = const LatLng(22.7196, 75.8577);
 
   Future<void> _pickPickupFromSearch() async {
     final selected = await _openSearchSheet(title: 'Select Boarding Point');
     if (selected == null || !mounted) return;
-    setState(() => _pickupPoint = selected);
+    setState(() {
+      _pickupPoint = selected;
+      _mapCenter = LatLng(selected.latitude, selected.longitude);
+      _mapPickMode = _BookingMapPickMode.pickup;
+    });
   }
 
   Future<GeoPoint?> _openSearchSheet({required String title}) {
@@ -191,6 +204,8 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
           latitude: position.latitude,
           longitude: position.longitude,
         );
+        _mapCenter = LatLng(position.latitude, position.longitude);
+        _mapPickMode = _BookingMapPickMode.pickup;
       });
     } catch (e) {
       _showError(e.toString());
@@ -202,6 +217,53 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
     );
+  }
+
+  Future<void> _setPointFromMap(LatLng point) async {
+    final suggestion = await _reversePoint(point);
+    final geo = GeoPoint(
+      name: LocationDisplayFormatter.title(suggestion),
+      address: suggestion['formattedAddress']?.toString() ?? suggestion['displayName']?.toString(),
+      latitude: point.latitude,
+      longitude: point.longitude,
+    );
+    if (!mounted) return;
+    setState(() {
+      _mapCenter = point;
+      if (_mapPickMode == _BookingMapPickMode.pickup) {
+        if (_dropPoint != null && _isSame(geo, _dropPoint!)) {
+          _showError('Pickup and drop cannot be same point.');
+          return;
+        }
+        _pickupPoint = geo;
+      } else {
+        if (_pickupPoint != null && _isSame(geo, _pickupPoint!)) {
+          _showError('Pickup and drop cannot be same point.');
+          return;
+        }
+        _dropPoint = geo;
+      }
+    });
+  }
+
+  Future<Map<String, dynamic>> _reversePoint(LatLng point) async {
+    String fullAddress = 'Selected location';
+    try {
+      fullAddress = await context.read<MapService>().reverseGeocode(
+            latitude: point.latitude,
+            longitude: point.longitude,
+          );
+    } catch (_) {}
+    return LocationDisplayFormatter.fromSearchSuggestion({
+      'displayName': fullAddress,
+      'formattedAddress': fullAddress,
+      'latitude': point.latitude,
+      'longitude': point.longitude,
+    });
+  }
+
+  bool _isSame(GeoPoint a, GeoPoint b) {
+    return (a.latitude - b.latitude).abs() < 0.0001 && (a.longitude - b.longitude).abs() < 0.0001;
   }
 
   @override
@@ -256,6 +318,11 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     ];
 
     final total = (ride.pricePerSeat * _seats).toStringAsFixed(2);
+    final routeLinePoints = <gmap.LatLng>[
+      gmap.LatLng(ride.origin.latitude, ride.origin.longitude),
+      ...ride.intermediateStops.map((s) => gmap.LatLng(s.latitude, s.longitude)),
+      gmap.LatLng(ride.destination.latitude, ride.destination.longitude),
+    ];
 
     return Scaffold(
       appBar: AppBar(title: const Text('Confirm Booking')),
@@ -284,6 +351,96 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                   const SizedBox(height: 2),
                   Text(
                     'Vehicle: ${ride.vehicleName ?? 'Vehicle'} ${ride.vehicleNumber ?? ''}'.trim(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Select on Map', style: TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Pickup'),
+                        selected: _mapPickMode == _BookingMapPickMode.pickup,
+                        onSelected: (_) => setState(() => _mapPickMode = _BookingMapPickMode.pickup),
+                      ),
+                      ChoiceChip(
+                        label: const Text('Drop'),
+                        selected: _mapPickMode == _BookingMapPickMode.drop,
+                        onSelected: (_) => setState(() => _mapPickMode = _BookingMapPickMode.drop),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 230,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: gmap.GoogleMap(
+                        initialCameraPosition: gmap.CameraPosition(
+                          target: gmap.LatLng(_mapCenter.latitude, _mapCenter.longitude),
+                          zoom: 12.5,
+                        ),
+                        onMapCreated: (c) {
+                          if (!_mapController.isCompleted) _mapController.complete(c);
+                        },
+                        onTap: (p) => _setPointFromMap(LatLng(p.latitude, p.longitude)),
+                        myLocationEnabled: true,
+                        myLocationButtonEnabled: false,
+                        zoomControlsEnabled: true,
+                        markers: {
+                          gmap.Marker(
+                            markerId: const gmap.MarkerId('ride-origin'),
+                            position: gmap.LatLng(ride.origin.latitude, ride.origin.longitude),
+                            icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueGreen),
+                          ),
+                          gmap.Marker(
+                            markerId: const gmap.MarkerId('ride-destination'),
+                            position: gmap.LatLng(ride.destination.latitude, ride.destination.longitude),
+                            icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueRed),
+                          ),
+                          if (_pickupPoint != null)
+                            gmap.Marker(
+                              markerId: const gmap.MarkerId('selected-pickup'),
+                              position: gmap.LatLng(_pickupPoint!.latitude, _pickupPoint!.longitude),
+                              icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueGreen),
+                              zIndexInt: _mapPickMode == _BookingMapPickMode.pickup ? 3 : 1,
+                            ),
+                          if (_dropPoint != null)
+                            gmap.Marker(
+                              markerId: const gmap.MarkerId('selected-drop'),
+                              position: gmap.LatLng(_dropPoint!.latitude, _dropPoint!.longitude),
+                              icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueRed),
+                              zIndexInt: _mapPickMode == _BookingMapPickMode.drop ? 3 : 1,
+                            ),
+                          ...ride.intermediateStops.asMap().entries.map(
+                                (e) => gmap.Marker(
+                                  markerId: gmap.MarkerId('ride-stop-${e.key}'),
+                                  position: gmap.LatLng(e.value.latitude, e.value.longitude),
+                                  icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueAzure),
+                                ),
+                              ),
+                        },
+                        polylines: {
+                          if (routeLinePoints.length > 1)
+                            gmap.Polyline(
+                              polylineId: const gmap.PolylineId('route'),
+                              points: routeLinePoints,
+                              width: 4,
+                              color: const Color(0xFF4F46E5),
+                            ),
+                        },
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -332,6 +489,11 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                         icon: const Icon(Icons.search),
                         label: const Text('Search Location'),
                       ),
+                      OutlinedButton.icon(
+                        onPressed: () => setState(() => _mapPickMode = _BookingMapPickMode.pickup),
+                        icon: const Icon(Icons.map_outlined),
+                        label: const Text('Select on Map'),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
@@ -379,8 +541,18 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                       final point = dropOptions.firstWhere(
                         (p) => '${p.name}|${p.latitude}|${p.longitude}' == value,
                       );
-                      setState(() => _dropPoint = point);
+                      setState(() {
+                        _dropPoint = point;
+                        _mapCenter = LatLng(point.latitude, point.longitude);
+                        _mapPickMode = _BookingMapPickMode.drop;
+                      });
                     },
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => setState(() => _mapPickMode = _BookingMapPickMode.drop),
+                    icon: const Icon(Icons.map_outlined),
+                    label: const Text('Select Drop on Map'),
                   ),
                 ],
               ),
