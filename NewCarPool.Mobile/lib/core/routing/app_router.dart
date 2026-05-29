@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../constants/app_routes.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/register_screen.dart';
+import '../../screens/auth/onboarding_screen.dart';
 import '../../screens/auth/forgot_password_screen.dart';
 import '../../screens/auth/splash_screen.dart';
 import '../../screens/dashboard/dashboard_screen.dart';
@@ -45,6 +46,8 @@ class AppRouter {
       GoRoute(path: AppRoutes.login, pageBuilder: (_, __) => _fadeSlidePage(const LoginScreen())),
       GoRoute(
           path: AppRoutes.register, pageBuilder: (_, __) => _fadeSlidePage(const RegisterScreen())),
+      GoRoute(
+          path: AppRoutes.onboarding, pageBuilder: (_, __) => _fadeSlidePage(const OnboardingScreen())),
       GoRoute(
           path: AppRoutes.forgotPassword,
           pageBuilder: (_, __) => _fadeSlidePage(const ForgotPasswordScreen())),

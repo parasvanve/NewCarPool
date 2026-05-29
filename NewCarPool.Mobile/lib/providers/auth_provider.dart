@@ -53,6 +53,10 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> hasSeenOnboarding() => _tokenStore.hasSeenOnboarding;
+
+  Future<void> markOnboardingSeen() => _tokenStore.setHasSeenOnboarding(true);
+
   Future<bool> restoreSessionFromStorage() async {
     isBootstrapping = true;
     notifyListeners();

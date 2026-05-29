@@ -130,7 +130,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       }
       if (context.mounted) {
         AppSnackBar.showSuccess(context, 'Account created successfully.');
-        context.go(AppRoutes.dashboard);
+        final seenOnboarding = await context.read<AuthProvider>().hasSeenOnboarding();
+        if (!context.mounted) return;
+        context.go(seenOnboarding ? AppRoutes.dashboard : AppRoutes.onboarding);
       }
     } on DioException catch (exception) {
       final error = exception.error;
