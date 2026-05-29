@@ -516,11 +516,36 @@ public sealed class RideService : IRideService
         {
             throw new ApiException("Ride already completed.");
         }
+        if (status == RideStatus.Cancelled && ride.Status == RideStatus.Started)
+        {
+            throw new ApiException("Started rides cannot be cancelled.");
+        }
+
+        if (status == RideStatus.Started && ride.Status is RideStatus.Started or RideStatus.Completed or RideStatus.Cancelled)
+        {
+            throw new ApiException(ride.Status == RideStatus.Started ? "Ride already started." : "Ride status does not allow start.");
+        }
+        if (status == RideStatus.Started && ride.Status is not (RideStatus.Open or RideStatus.Full))
+        {
+            throw new ApiException("Ride status does not allow start.");
+        }
+
+        if (status == RideStatus.Completed && ride.Status != RideStatus.Started)
+        {
+            throw new ApiException("Only started rides can be completed.");
+        }
 
         ride.Status = status;
         ride.UpdatedAtUtc = DateTime.UtcNow;
+        if (status == RideStatus.Started) ride.StartedAtUtc = DateTime.UtcNow;
+        if (status == RideStatus.Completed) ride.CompletedAtUtc = DateTime.UtcNow;
         if (status == RideStatus.Cancelled)
         {
+            ride.CancelledAtUtc = DateTime.UtcNow;
+            if (!string.IsNullOrWhiteSpace(reason))
+            {
+                ride.CancellationReason = Truncate(reason, 1000);
+            }
             var activeBookings = await _rideBookings.Query()
                 .Where(x => x.RideOfferId == rideOfferId && (x.Status == BookingStatus.Confirmed || x.Status == BookingStatus.Pending))
                 .Include(x => x.Passenger)
@@ -548,6 +573,30 @@ public sealed class RideService : IRideService
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        if (status == RideStatus.Started || status == RideStatus.Completed)
+        {
+            var bookedPassengerIds = await _rideBookings.Query()
+                .Where(x => x.RideOfferId == rideOfferId && x.Status == BookingStatus.Confirmed)
+                .Select(x => x.PassengerId)
+                .Distinct()
+                .ToListAsync(cancellationToken);
+            var title = status == RideStatus.Started ? "Ride started" : "Ride completed";
+            var message = status == RideStatus.Started
+                ? $"Your ride from {ShortLocationName(ride.OriginName)} to {ShortLocationName(ride.DestinationName)} has started."
+                : $"Your ride from {ShortLocationName(ride.OriginName)} to {ShortLocationName(ride.DestinationName)} has been completed.";
+            foreach (var passengerId in bookedPassengerIds)
+            {
+                await _notificationService.CreateAsync(
+                    passengerId,
+                    new Application.DTOs.Notifications.CreateNotificationRequest(
+                        title,
+                        Truncate(message, 1000),
+                        status == RideStatus.Started ? NotificationType.RideStarted : NotificationType.RideCompleted,
+                        ride.Id,
+                        null),
+                    cancellationToken);
+            }
+        }
         return MapRide(ride);
     }
 
@@ -643,7 +692,11 @@ public sealed class RideService : IRideService
             ride.RoutePolyline,
             ride.DistanceKm,
             ride.EtaMinutes,
-            ride.Status);
+            ride.Status,
+            ride.StartedAtUtc,
+            ride.CompletedAtUtc,
+            ride.CancelledAtUtc,
+            ride.CancellationReason);
 
     private static DateTime NormalizeToUtc(DateTime value) =>
         value.Kind switch

@@ -102,6 +102,18 @@ using (var scope = app.Services.CreateScope())
         IF COL_LENGTH('RideOffers', 'Notes') IS NULL
             ALTER TABLE RideOffers ADD Notes nvarchar(1000) NULL;
 
+        IF COL_LENGTH('RideOffers', 'StartedAtUtc') IS NULL
+            ALTER TABLE RideOffers ADD StartedAtUtc datetime2 NULL;
+
+        IF COL_LENGTH('RideOffers', 'CompletedAtUtc') IS NULL
+            ALTER TABLE RideOffers ADD CompletedAtUtc datetime2 NULL;
+
+        IF COL_LENGTH('RideOffers', 'CancelledAtUtc') IS NULL
+            ALTER TABLE RideOffers ADD CancelledAtUtc datetime2 NULL;
+
+        IF COL_LENGTH('RideOffers', 'CancellationReason') IS NULL
+            ALTER TABLE RideOffers ADD CancellationReason nvarchar(1000) NULL;
+
         IF OBJECT_ID('RideStops', 'U') IS NULL
         BEGIN
             CREATE TABLE RideStops (

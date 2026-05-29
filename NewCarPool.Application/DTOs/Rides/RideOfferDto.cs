@@ -20,4 +20,8 @@ public sealed record RideOfferDto(
     string? RoutePolyline,
     double? DistanceKm,
     int? EtaMinutes,
-    RideStatus Status);
+    RideStatus Status,
+    DateTime? StartedAtUtc,
+    DateTime? CompletedAtUtc,
+    DateTime? CancelledAtUtc,
+    string? CancellationReason);

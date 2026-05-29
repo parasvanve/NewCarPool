@@ -25,6 +25,10 @@ public sealed class RideOffer
     public double? DistanceKm { get; set; }
     public int? EtaMinutes { get; set; }
     public RideStatus Status { get; set; } = RideStatus.Open;
+    public DateTime? StartedAtUtc { get; set; }
+    public DateTime? CompletedAtUtc { get; set; }
+    public DateTime? CancelledAtUtc { get; set; }
+    public string? CancellationReason { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAtUtc { get; set; }
 

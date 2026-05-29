@@ -93,6 +93,29 @@ class _TripsScreenState extends State<TripsScreen> {
     return result;
   }
 
+  Future<bool> _showConfirmationDialog({
+    required String title,
+    required String confirmLabel,
+  }) async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('No'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
   Future<void> _refreshAll() async {
     final rideProvider = context.read<RideProvider>();
     final bookingProvider = context.read<BookingProvider>();
@@ -228,6 +251,32 @@ class _TripsScreenState extends State<TripsScreen> {
                               bookingRideId: _bookingRideId,
                               onRideAction: (ride, action) async {
                                 final provider = context.read<RideProvider>();
+                                if (action == 'start') {
+                                  final ok = await _showConfirmationDialog(
+                                    title: 'Start this ride?',
+                                    confirmLabel: 'Yes, Start Ride',
+                                  );
+                                  if (!ok) return;
+                                  await provider.startRide(ride.id);
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Ride started')),
+                                    );
+                                  }
+                                }
+                                if (action == 'complete') {
+                                  final ok = await _showConfirmationDialog(
+                                    title: 'Complete this ride?',
+                                    confirmLabel: 'Yes, Complete Ride',
+                                  );
+                                  if (!ok) return;
+                                  await provider.completeRide(ride.id);
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Ride completed')),
+                                    );
+                                  }
+                                }
                                 if (action == 'cancel') {
                                   final reason = await _showCancelDialog(
                                     title: 'Are you sure you want to cancel this ride?',
@@ -330,17 +379,35 @@ class _UpcomingTab extends StatelessWidget {
       children: [
         if (myOfferedUpcoming.isNotEmpty) ...[
           const _SectionHeader('My Offered Rides'),
-          ...myOfferedUpcoming.map((ride) => _RideCard(
-                ride: ride,
-                statusBadge: 'Offered',
-                primaryLabel: 'View Details',
-                secondaryLabel: 'Chat',
-                tertiaryLabel: 'Cancel Ride',
-                showPassengerCount: true,
-                onPrimary: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride))),
-                onSecondary: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
-                onTertiary: () => onRideAction(ride, 'cancel'),
-              )),
+          ...myOfferedUpcoming.map((ride) {
+            final isOpenOrFull = ride.status == 1 || ride.status == 2;
+            final isStarted = ride.status == 3;
+            final statusBadge = switch (ride.status) {
+              1 => 'Open',
+              2 => 'Full',
+              3 => 'Started',
+              4 => 'Completed',
+              5 => 'Cancelled',
+              _ => 'Offered',
+            };
+            return _RideCard(
+              ride: ride,
+              statusBadge: statusBadge,
+              primaryLabel: 'View Details',
+              secondaryLabel: 'Chat',
+              tertiaryLabel: isOpenOrFull
+                  ? 'Cancel Ride'
+                  : (isStarted ? 'Complete Ride' : null),
+              showPassengerCount: true,
+              onPrimary: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride))),
+              onSecondary: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
+              onTertiary: isOpenOrFull
+                  ? () => onRideAction(ride, 'cancel')
+                  : (isStarted ? () => onRideAction(ride, 'complete') : null),
+              quaternaryLabel: isOpenOrFull ? 'Start Ride' : null,
+              onQuaternary: isOpenOrFull ? () => onRideAction(ride, 'start') : null,
+            );
+          }),
         ],
         if (availableRides.isNotEmpty) ...[
           const _SectionHeader('Available Rides'),
@@ -384,7 +451,7 @@ class _BookedTab extends StatelessWidget {
           if (ride == null) return const SizedBox.shrink();
           return _RideCard(
             ride: ride,
-            statusBadge: 'Booked',
+            statusBadge: ride.status == 3 ? 'Ride Started' : 'Booked',
             primaryLabel: 'View Details',
             secondaryLabel: 'Chat with Driver',
             tertiaryLabel: 'Cancel Booking',
@@ -917,6 +984,8 @@ class _RideCard extends StatelessWidget {
     this.onSecondary,
     this.tertiaryLabel,
     this.onTertiary,
+    this.quaternaryLabel,
+    this.onQuaternary,
     this.bookedSeats,
     this.yourPickupName,
     this.yourDropName,
@@ -931,6 +1000,8 @@ class _RideCard extends StatelessWidget {
   final VoidCallback? onSecondary;
   final String? tertiaryLabel;
   final VoidCallback? onTertiary;
+  final String? quaternaryLabel;
+  final VoidCallback? onQuaternary;
   final int? bookedSeats;
   final String? yourPickupName;
   final String? yourDropName;
@@ -1032,6 +1103,12 @@ class _RideCard extends StatelessWidget {
                     icon: const Icon(Icons.cancel_outlined),
                     label: Text(tertiaryLabel!),
                     style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent),
+                  ),
+                if (quaternaryLabel != null)
+                  FilledButton.icon(
+                    onPressed: onQuaternary,
+                    icon: const Icon(Icons.play_arrow),
+                    label: Text(quaternaryLabel!),
                   ),
               ],
             ),

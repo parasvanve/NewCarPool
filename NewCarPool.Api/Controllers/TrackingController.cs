@@ -29,7 +29,24 @@ public sealed class TrackingController : ControllerBase
         await _hubContext.Clients
             .Group(TrackingHub.RideGroupName(request.RideOfferId.ToString()))
             .SendAsync("locationUpdated", location, cancellationToken);
+        await _hubContext.Clients
+            .Group(TrackingHub.RideGroupName(request.RideOfferId.ToString()))
+            .SendAsync("DriverLocationUpdated", location, cancellationToken);
 
         return Ok(location);
     }
+
+    [HttpPost("/api/rides/{rideOfferId:guid}/location")]
+    public async Task<ActionResult<LocationUpdateDto>> PublishForRide(
+        Guid rideOfferId,
+        [FromBody] LocationUpdateRequest request,
+        CancellationToken cancellationToken)
+    {
+        var normalized = request with { RideOfferId = rideOfferId };
+        return await Publish(normalized, cancellationToken);
+    }
+
+    [HttpGet("/api/rides/{rideOfferId:guid}/location/latest")]
+    public async Task<ActionResult<LocationUpdateDto>> Latest(Guid rideOfferId, CancellationToken cancellationToken) =>
+        Ok(await _trackingService.GetLatestLocationAsync(User.GetUserId(), rideOfferId, cancellationToken));
 }

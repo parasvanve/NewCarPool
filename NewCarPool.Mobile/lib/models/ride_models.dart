@@ -46,6 +46,8 @@ class RideOffer {
     this.notes,
     this.vehicleName,
     this.vehicleNumber,
+    this.startedAtUtc,
+    this.completedAtUtc,
     this.cancelledAtUtc,
     this.cancellationReason,
     required this.status,
@@ -64,6 +66,8 @@ class RideOffer {
   final String? notes;
   final String? vehicleName;
   final String? vehicleNumber;
+  final DateTime? startedAtUtc;
+  final DateTime? completedAtUtc;
   final DateTime? cancelledAtUtc;
   final String? cancellationReason;
   final int status;
@@ -88,6 +92,8 @@ class RideOffer {
         notes: json['notes']?.toString(),
         vehicleName: json['vehicleName']?.toString(),
         vehicleNumber: json['vehicleNumber']?.toString(),
+        startedAtUtc: DateTime.tryParse(json['startedAtUtc']?.toString() ?? ''),
+        completedAtUtc: DateTime.tryParse(json['completedAtUtc']?.toString() ?? ''),
         cancelledAtUtc: DateTime.tryParse(json['cancelledAtUtc']?.toString() ?? ''),
         cancellationReason: json['cancellationReason']?.toString(),
         status: json['status'],

@@ -20,11 +20,13 @@ class TrackingService {
         .withAutomaticReconnect()
         .build();
 
-    _connection!.on('locationUpdated', (args) {
+    void handleLocationPayload(List<Object?>? args) {
       if (args != null && args.isNotEmpty) {
         onLocation(Map<String, dynamic>.from(args.first as Map));
       }
-    });
+    }
+    _connection!.on('locationUpdated', handleLocationPayload);
+    _connection!.on('DriverLocationUpdated', handleLocationPayload);
 
     await _connection!.start();
     await _connection!.invoke('JoinRide', args: [rideOfferId]);
@@ -37,13 +39,25 @@ class TrackingService {
     double? heading,
     double? speedKph,
   }) async {
-    await _apiClient.dio.post('/tracking/location', data: {
+    await _apiClient.dio.post('/rides/$rideOfferId/location', data: {
       'rideOfferId': rideOfferId,
       'latitude': latitude,
       'longitude': longitude,
       'heading': heading,
       'speedKph': speedKph,
     });
+  }
+
+  Future<Map<String, dynamic>?> latestLocation(String rideOfferId) async {
+    try {
+      final response = await _apiClient.dio.get('/rides/$rideOfferId/location/latest');
+      final data = response.data;
+      if (data is Map<String, dynamic>) return data;
+      if (data is Map) return Map<String, dynamic>.from(data);
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> disconnect() async {
