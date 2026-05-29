@@ -13,11 +13,16 @@ public sealed class BookingService : IBookingService
 {
     private readonly NewCarPoolDbContext _dbContext;
     private readonly IGenericRepository<RideBooking> _bookings;
+    private readonly INotificationService _notificationService;
 
-    public BookingService(NewCarPoolDbContext dbContext, IGenericRepository<RideBooking> bookings)
+    public BookingService(
+        NewCarPoolDbContext dbContext,
+        IGenericRepository<RideBooking> bookings,
+        INotificationService notificationService)
     {
         _dbContext = dbContext;
         _bookings = bookings;
+        _notificationService = notificationService;
     }
 
     public Task<RideBookingDto> AcceptAsync(Guid driverId, Guid bookingId, CancellationToken cancellationToken) =>
@@ -26,7 +31,7 @@ public sealed class BookingService : IBookingService
     public Task<RideBookingDto> RejectAsync(Guid driverId, Guid bookingId, CancellationToken cancellationToken) =>
         ChangeByDriverAsync(driverId, bookingId, BookingStatus.Rejected, cancellationToken, restoreSeats: true);
 
-    public async Task<RideBookingDto> CancelAsync(Guid passengerId, Guid bookingId, CancellationToken cancellationToken)
+    public async Task<RideBookingDto> CancelAsync(Guid passengerId, Guid bookingId, string? reason, CancellationToken cancellationToken)
     {
         await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
         var booking = await Query().FirstOrDefaultAsync(x => x.Id == bookingId, cancellationToken) ?? throw new ApiException("Booking not found.", 404);
@@ -37,7 +42,12 @@ public sealed class BookingService : IBookingService
 
         if (booking.Status == BookingStatus.Cancelled)
         {
-            return Map(booking);
+            throw new ApiException("Booking already cancelled.");
+        }
+
+        if (booking.RideOffer.Status == RideStatus.Completed)
+        {
+            throw new ApiException("Ride already completed.");
         }
 
         booking.Status = BookingStatus.Cancelled;
@@ -50,6 +60,15 @@ public sealed class BookingService : IBookingService
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        await _notificationService.CreateAsync(
+            booking.RideOffer.DriverId,
+            new Application.DTOs.Notifications.CreateNotificationRequest(
+                "Booking cancelled",
+                $"{booking.Passenger?.FullName ?? "Passenger"} cancelled booking for your ride.",
+                NotificationType.RideCancelled,
+                booking.RideOfferId,
+                booking.Id),
+            cancellationToken);
         return Map(booking);
     }
 

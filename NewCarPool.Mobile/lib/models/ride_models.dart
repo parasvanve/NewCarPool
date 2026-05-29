@@ -46,6 +46,8 @@ class RideOffer {
     this.notes,
     this.vehicleName,
     this.vehicleNumber,
+    this.cancelledAtUtc,
+    this.cancellationReason,
     required this.status,
   });
 
@@ -62,6 +64,8 @@ class RideOffer {
   final String? notes;
   final String? vehicleName;
   final String? vehicleNumber;
+  final DateTime? cancelledAtUtc;
+  final String? cancellationReason;
   final int status;
 
   factory RideOffer.fromJson(Map<String, dynamic> json) => RideOffer(
@@ -84,6 +88,8 @@ class RideOffer {
         notes: json['notes']?.toString(),
         vehicleName: json['vehicleName']?.toString(),
         vehicleNumber: json['vehicleNumber']?.toString(),
+        cancelledAtUtc: DateTime.tryParse(json['cancelledAtUtc']?.toString() ?? ''),
+        cancellationReason: json['cancellationReason']?.toString(),
         status: json['status'],
       );
 }

@@ -12,7 +12,7 @@ public interface IRideService
     Task<IReadOnlyList<RideOfferDto>> MineAsync(Guid userId, CancellationToken cancellationToken);
     Task<RideOfferDto> UpdateRideAsync(Guid driverId, Guid rideOfferId, CreateRideOfferRequest request, CancellationToken cancellationToken);
     Task DeleteRideAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken);
-    Task<RideOfferDto> CancelRideAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken);
+    Task<RideOfferDto> CancelRideAsync(Guid driverId, Guid rideOfferId, string? reason, CancellationToken cancellationToken);
     Task<RideBookingDto> BookRideAsync(Guid passengerId, BookRideRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyList<RideBookingDto>> ParticipantsAsync(Guid rideOfferId, CancellationToken cancellationToken);
     Task<IReadOnlyList<RideChatMessageDto>> RideChatAsync(Guid userId, Guid rideOfferId, CancellationToken cancellationToken);

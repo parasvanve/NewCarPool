@@ -24,8 +24,11 @@ public sealed class BookingsController : ControllerBase
         Ok(await _bookingService.RejectAsync(User.GetUserId(), bookingId, cancellationToken));
 
     [HttpPost("{bookingId:guid}/cancel")]
-    public async Task<ActionResult<RideBookingDto>> Cancel(Guid bookingId, CancellationToken cancellationToken) =>
-        Ok(await _bookingService.CancelAsync(User.GetUserId(), bookingId, cancellationToken));
+    public async Task<ActionResult<RideBookingDto>> Cancel(
+        Guid bookingId,
+        [FromBody] CancelActionRequest? request,
+        CancellationToken cancellationToken) =>
+        Ok(await _bookingService.CancelAsync(User.GetUserId(), bookingId, request?.Reason, cancellationToken));
 
     [HttpGet("history")]
     public async Task<ActionResult<IReadOnlyList<RideBookingDto>>> History(CancellationToken cancellationToken) =>

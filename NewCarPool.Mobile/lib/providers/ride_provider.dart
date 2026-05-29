@@ -134,8 +134,8 @@ class RideProvider extends ChangeNotifier {
     _upsertRide(updated);
   }
 
-  Future<void> cancelRide(String rideOfferId) async {
-    final updated = await _rideService.cancelRide(rideOfferId);
+  Future<void> cancelRide(String rideOfferId, {String? reason}) async {
+    final updated = await _rideService.cancelRide(rideOfferId, reason: reason);
     _upsertRide(updated);
   }
 

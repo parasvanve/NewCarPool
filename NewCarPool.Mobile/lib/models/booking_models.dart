@@ -34,6 +34,8 @@ class RideBooking {
     required this.createdAtUtc,
     this.passengerPickup,
     this.passengerDrop,
+    this.cancelledAtUtc,
+    this.cancellationReason,
   });
 
   final String id;
@@ -45,6 +47,8 @@ class RideBooking {
   final DateTime createdAtUtc;
   final GeoPoint? passengerPickup;
   final GeoPoint? passengerDrop;
+  final DateTime? cancelledAtUtc;
+  final String? cancellationReason;
   BookingStatus get bookingStatus => BookingStatus.fromCode(status);
 
   factory RideBooking.fromJson(Map<String, dynamic> json) => RideBooking(
@@ -55,6 +59,8 @@ class RideBooking {
         seatsBooked: (json['seatsBooked'] as num?)?.toInt() ?? 0,
         status: (json['status'] as num?)?.toInt() ?? 0,
         createdAtUtc: DateTime.tryParse(json['createdAtUtc']?.toString() ?? '') ?? DateTime.now().toUtc(),
+        cancelledAtUtc: DateTime.tryParse(json['cancelledAtUtc']?.toString() ?? ''),
+        cancellationReason: json['cancellationReason']?.toString(),
         passengerPickup: _pointFromJson(
           raw: json['passengerPickup'] ?? json['pickup'],
           name: json['passengerPickupName'],

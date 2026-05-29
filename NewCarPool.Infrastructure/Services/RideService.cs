@@ -240,8 +240,8 @@ public sealed class RideService : IRideService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    public Task<RideOfferDto> CancelRideAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken) =>
-        ChangeRideStatusAsync(driverId, rideOfferId, RideStatus.Cancelled, cancellationToken);
+    public Task<RideOfferDto> CancelRideAsync(Guid driverId, Guid rideOfferId, string? reason, CancellationToken cancellationToken) =>
+        ChangeRideStatusAsync(driverId, rideOfferId, RideStatus.Cancelled, reason, cancellationToken);
 
     public async Task<RideBookingDto> BookRideAsync(Guid passengerId, BookRideRequest request, CancellationToken cancellationToken)
     {
@@ -488,22 +488,65 @@ public sealed class RideService : IRideService
     }
 
     public Task<RideOfferDto> StartRideAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken) =>
-        ChangeRideStatusAsync(driverId, rideOfferId, RideStatus.Started, cancellationToken);
+        ChangeRideStatusAsync(driverId, rideOfferId, RideStatus.Started, null, cancellationToken);
 
     public Task<RideOfferDto> CompleteRideAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken) =>
-        ChangeRideStatusAsync(driverId, rideOfferId, RideStatus.Completed, cancellationToken);
+        ChangeRideStatusAsync(driverId, rideOfferId, RideStatus.Completed, null, cancellationToken);
 
-    private async Task<RideOfferDto> ChangeRideStatusAsync(Guid driverId, Guid rideOfferId, RideStatus status, CancellationToken cancellationToken)
+    private async Task<RideOfferDto> ChangeRideStatusAsync(
+        Guid driverId,
+        Guid rideOfferId,
+        RideStatus status,
+        string? reason,
+        CancellationToken cancellationToken)
     {
         var ride = await _rides.GetRideByIdAsync(rideOfferId, cancellationToken)
             ?? throw new ApiException("Ride not found.", 404);
         if (ride.DriverId != driverId)
         {
-            throw new ApiException("Only the driver can update this ride.", 403);
+            throw new ApiException("You cannot cancel this ride.", 403);
+        }
+
+        if (status == RideStatus.Cancelled && ride.Status == RideStatus.Cancelled)
+        {
+            throw new ApiException("Ride already cancelled.");
+        }
+
+        if (status == RideStatus.Cancelled && ride.Status == RideStatus.Completed)
+        {
+            throw new ApiException("Ride already completed.");
         }
 
         ride.Status = status;
         ride.UpdatedAtUtc = DateTime.UtcNow;
+        if (status == RideStatus.Cancelled)
+        {
+            var activeBookings = await _rideBookings.Query()
+                .Where(x => x.RideOfferId == rideOfferId && (x.Status == BookingStatus.Confirmed || x.Status == BookingStatus.Pending))
+                .Include(x => x.Passenger)
+                .ToListAsync(cancellationToken);
+            foreach (var booking in activeBookings)
+            {
+                booking.Status = BookingStatus.Cancelled;
+                booking.CancelledAtUtc = DateTime.UtcNow;
+            }
+
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            foreach (var booking in activeBookings)
+            {
+                await _notificationService.CreateAsync(
+                    booking.PassengerId,
+                    new Application.DTOs.Notifications.CreateNotificationRequest(
+                        "Ride cancelled",
+                        $"{ride.Driver?.FullName ?? "Driver"} cancelled the ride.",
+                        NotificationType.RideCancelled,
+                        ride.Id,
+                        booking.Id),
+                    cancellationToken);
+            }
+            return MapRide(ride);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         return MapRide(ride);
     }

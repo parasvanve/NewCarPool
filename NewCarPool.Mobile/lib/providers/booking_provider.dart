@@ -30,8 +30,8 @@ class BookingProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> cancel(String bookingId) async {
-    await _updateBooking(bookingId, () => _bookingService.cancel(bookingId));
+  Future<void> cancel(String bookingId, {String? reason}) async {
+    await _updateBooking(bookingId, () => _bookingService.cancel(bookingId, reason: reason));
   }
 
   Future<RideBooking> request({

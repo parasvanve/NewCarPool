@@ -15,11 +15,13 @@ namespace NewCarPool.Api.Controllers;
 public sealed class RidesController : ControllerBase
 {
     private readonly IRideService _rideService;
+    private readonly IBookingService _bookingService;
     private readonly IHubContext<AppRealtimeHub> _hubContext;
 
-    public RidesController(IRideService rideService, IHubContext<AppRealtimeHub> hubContext)
+    public RidesController(IRideService rideService, IBookingService bookingService, IHubContext<AppRealtimeHub> hubContext)
     {
         _rideService = rideService;
+        _bookingService = bookingService;
         _hubContext = hubContext;
     }
 
@@ -87,6 +89,16 @@ public sealed class RidesController : ControllerBase
         Ok(await _rideService.CompleteRideAsync(User.GetUserId(), rideOfferId, cancellationToken));
 
     [HttpPost("{rideOfferId:guid}/cancel")]
-    public async Task<ActionResult<RideOfferDto>> Cancel(Guid rideOfferId, CancellationToken cancellationToken) =>
-        Ok(await _rideService.CancelRideAsync(User.GetUserId(), rideOfferId, cancellationToken));
+    public async Task<ActionResult<RideOfferDto>> Cancel(
+        Guid rideOfferId,
+        [FromBody] CancelActionRequest? request,
+        CancellationToken cancellationToken) =>
+        Ok(await _rideService.CancelRideAsync(User.GetUserId(), rideOfferId, request?.Reason, cancellationToken));
+
+    [HttpPost("bookings/{bookingId:guid}/cancel")]
+    public async Task<ActionResult<RideBookingDto>> CancelBooking(
+        Guid bookingId,
+        [FromBody] CancelActionRequest? request,
+        CancellationToken cancellationToken) =>
+        Ok(await _bookingService.CancelAsync(User.GetUserId(), bookingId, request?.Reason, cancellationToken));
 }

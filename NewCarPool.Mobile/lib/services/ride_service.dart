@@ -111,8 +111,13 @@ class RideService {
     return RideOffer.fromJson(Map<String, dynamic>.from(response.data));
   }
 
-  Future<RideOffer> cancelRide(String rideOfferId) async {
-    final response = await _apiClient.dio.post('/rides/$rideOfferId/cancel');
+  Future<RideOffer> cancelRide(String rideOfferId, {String? reason}) async {
+    final response = await _apiClient.dio.post(
+      '/rides/$rideOfferId/cancel',
+      data: {
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
     return RideOffer.fromJson(Map<String, dynamic>.from(response.data));
   }
 }

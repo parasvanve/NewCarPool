@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -50,6 +50,47 @@ class _TripsScreenState extends State<TripsScreen> {
   void dispose() {
     context.read<RideProvider>().stopUpcomingAutoRefresh();
     super.dispose();
+  }
+
+  Future<String?> _showCancelDialog({
+    required String title,
+    required String message,
+    required String confirmLabel,
+  }) async {
+    final controller = TextEditingController();
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(message),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Reason (optional)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(null),
+            child: const Text('No'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
   }
 
   Future<void> _refreshAll() async {
@@ -107,9 +148,10 @@ class _TripsScreenState extends State<TripsScreen> {
     }).toList()
       ..sort((a, b) => a.departureTimeUtc.compareTo(b.departureTimeUtc));
 
-    final myBookedUpcoming = bookedByMe.where((b) {
+    final myBookedActive = bookedByMe.where((b) {
       final ride = ridesById[b.rideOfferId];
       if (ride == null) return false;
+      if (b.bookingStatus != BookingStatus.accepted) return false;
       final activeRide = ride.status == 1 || ride.status == 2 || ride.status == 3;
       return activeRide && (ride.departureTimeUtc.isAfter(nowUtc) || ride.status == 3);
     }).toList();
@@ -141,6 +183,7 @@ class _TripsScreenState extends State<TripsScreen> {
     final cancelledBookings = allBookings
         .where((b) => b.bookingStatus == BookingStatus.cancelled || b.bookingStatus == BookingStatus.rejected)
         .toList();
+    final cancelledOfferedRides = rideProvider.myRides.where((r) => r.status == 5).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FC),
@@ -165,9 +208,11 @@ class _TripsScreenState extends State<TripsScreen> {
                   children: [
                     _TripFilterChip(label: 'Upcoming', selected: _tab == 0, onTap: () => setState(() => _tab = 0)),
                     const SizedBox(width: 8),
-                    _TripFilterChip(label: 'Completed', selected: _tab == 1, onTap: () => setState(() => _tab = 1)),
+                    _TripFilterChip(label: 'Booked', selected: _tab == 1, onTap: () => setState(() => _tab = 1)),
                     const SizedBox(width: 8),
-                    _TripFilterChip(label: 'Cancelled', selected: _tab == 2, onTap: () => setState(() => _tab = 2)),
+                    _TripFilterChip(label: 'Completed', selected: _tab == 2, onTap: () => setState(() => _tab = 2)),
+                    const SizedBox(width: 8),
+                    _TripFilterChip(label: 'Cancelled', selected: _tab == 3, onTap: () => setState(() => _tab = 3)),
                   ],
                 ),
               ),
@@ -179,13 +224,24 @@ class _TripsScreenState extends State<TripsScreen> {
                       : _tab == 0
                           ? _UpcomingTab(
                               myOfferedUpcoming: myOfferedUpcoming,
-                              myBookedUpcoming: myBookedUpcoming,
                               availableRides: availableRides,
-                              ridesById: ridesById,
                               bookingRideId: _bookingRideId,
                               onRideAction: (ride, action) async {
                                 final provider = context.read<RideProvider>();
-                                if (action == 'cancel') await provider.cancelRide(ride.id);
+                                if (action == 'cancel') {
+                                  final reason = await _showCancelDialog(
+                                    title: 'Are you sure you want to cancel this ride?',
+                                    message: 'This ride will be moved to cancelled history.',
+                                    confirmLabel: 'Yes, Cancel Ride',
+                                  );
+                                  if (reason == null) return;
+                                  await provider.cancelRide(ride.id, reason: reason);
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Ride cancelled successfully')),
+                                    );
+                                  }
+                                }
                                 await _refreshAll();
                               },
                               onBookRide: (ride) async {
@@ -208,12 +264,36 @@ class _TripsScreenState extends State<TripsScreen> {
                               },
                             )
                           : _tab == 1
+                              ? _BookedTab(
+                                  booked: myBookedActive,
+                                  ridesById: ridesById,
+                                  onCancelBooking: (booking) async {
+                                    final reason = await _showCancelDialog(
+                                      title: 'Are you sure you want to cancel this booking?',
+                                      message: 'Your booking will be cancelled and moved to history.',
+                                      confirmLabel: 'Yes, Cancel Booking',
+                                    );
+                                    if (reason == null) return;
+                                    await context.read<BookingProvider>().cancel(booking.id, reason: reason);
+                                    await _refreshAll();
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Booking cancelled successfully')),
+                                      );
+                                    }
+                                  },
+                                )
+                              : _tab == 2
                               ? _CompletedTab(
                                   offeredCompleted: myOfferedCompleted,
                                   bookedCompleted: myBookedCompleted,
                                   ridesById: ridesById,
                                 )
-                              : _CancelledTab(bookings: cancelledBookings),
+                              : _CancelledTab(
+                                  bookings: cancelledBookings,
+                                  offeredCancelled: cancelledOfferedRides,
+                                  ridesById: ridesById,
+                                ),
                 ),
               ),
             ],
@@ -227,25 +307,21 @@ class _TripsScreenState extends State<TripsScreen> {
 class _UpcomingTab extends StatelessWidget {
   const _UpcomingTab({
     required this.myOfferedUpcoming,
-    required this.myBookedUpcoming,
     required this.availableRides,
-    required this.ridesById,
     required this.bookingRideId,
     required this.onRideAction,
     required this.onBookRide,
   });
 
   final List<RideOffer> myOfferedUpcoming;
-  final List<RideBooking> myBookedUpcoming;
   final List<RideOffer> availableRides;
-  final Map<String, RideOffer> ridesById;
   final String? bookingRideId;
   final Future<void> Function(RideOffer ride, String action) onRideAction;
   final Future<void> Function(RideOffer ride) onBookRide;
 
   @override
   Widget build(BuildContext context) {
-    if (myOfferedUpcoming.isEmpty && myBookedUpcoming.isEmpty && availableRides.isEmpty) {
+    if (myOfferedUpcoming.isEmpty && availableRides.isEmpty) {
       return ListView(children: const [SizedBox(height: 140), Center(child: Text('No upcoming rides available'))]);
     }
 
@@ -266,24 +342,6 @@ class _UpcomingTab extends StatelessWidget {
                 onTertiary: () => onRideAction(ride, 'cancel'),
               )),
         ],
-        if (myBookedUpcoming.isNotEmpty) ...[
-          const _SectionHeader('My Booked Upcoming Rides'),
-          ...myBookedUpcoming.map((booking) {
-            final ride = ridesById[booking.rideOfferId];
-            if (ride == null) return const SizedBox.shrink();
-            return _RideCard(
-              ride: ride,
-              statusBadge: 'Booked',
-              primaryLabel: 'View Details',
-              secondaryLabel: 'Chat with Driver',
-              bookedSeats: booking.seatsBooked,
-              yourPickupName: booking.passengerPickup?.name,
-              yourDropName: booking.passengerDrop?.name,
-              onPrimary: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride))),
-              onSecondary: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
-            );
-          }),
-        ],
         if (availableRides.isNotEmpty) ...[
           const _SectionHeader('Available Rides'),
           ...availableRides.map((ride) => _RideCard(
@@ -295,6 +353,49 @@ class _UpcomingTab extends StatelessWidget {
                 onSecondary: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride))),
               )),
         ],
+      ],
+    );
+  }
+}
+
+class _BookedTab extends StatelessWidget {
+  const _BookedTab({
+    required this.booked,
+    required this.ridesById,
+    required this.onCancelBooking,
+  });
+
+  final List<RideBooking> booked;
+  final Map<String, RideOffer> ridesById;
+  final Future<void> Function(RideBooking booking) onCancelBooking;
+
+  @override
+  Widget build(BuildContext context) {
+    if (booked.isEmpty) {
+      return ListView(children: const [SizedBox(height: 140), Center(child: Text('No booked rides'))]);
+    }
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+      children: [
+        const _SectionHeader('My Booked Rides'),
+        ...booked.map((booking) {
+          final ride = ridesById[booking.rideOfferId];
+          if (ride == null) return const SizedBox.shrink();
+          return _RideCard(
+            ride: ride,
+            statusBadge: 'Booked',
+            primaryLabel: 'View Details',
+            secondaryLabel: 'Chat with Driver',
+            tertiaryLabel: 'Cancel Booking',
+            bookedSeats: booking.seatsBooked,
+            yourPickupName: booking.passengerPickup?.name,
+            yourDropName: booking.passengerDrop?.name,
+            onPrimary: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride))),
+            onSecondary: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
+            onTertiary: () => onCancelBooking(booking),
+          );
+        }),
       ],
     );
   }
@@ -449,7 +550,7 @@ class _CompletedOfferedRideCard extends StatelessWidget {
                       runSpacing: 10,
                       children: [
                         _SummaryChip(label: 'Total Seats Booked', value: '${passengers.fold<int>(0, (sum, b) => sum + b.seatsBooked)}'),
-                        _SummaryChip(label: 'Total Earning', value: '₹$totalEarning'),
+                        _SummaryChip(label: 'Total Earning', value: 'â‚¹$totalEarning'),
                         _SummaryChip(label: 'Vehicle', value: '${ride.vehicleName ?? 'Vehicle'} ${ride.vehicleNumber ?? ''}'.trim()),
                       ],
                     ),
@@ -578,32 +679,230 @@ class _PassengerCard extends StatelessWidget {
 }
 
 class _CancelledTab extends StatelessWidget {
-  const _CancelledTab({required this.bookings});
+  const _CancelledTab({
+    required this.bookings,
+    required this.offeredCancelled,
+    required this.ridesById,
+  });
 
   final List<RideBooking> bookings;
+  final List<RideOffer> offeredCancelled;
+  final Map<String, RideOffer> ridesById;
 
   @override
   Widget build(BuildContext context) {
-    if (bookings.isEmpty) {
+    if (bookings.isEmpty && offeredCancelled.isEmpty) {
       return ListView(children: const [SizedBox(height: 140), Center(child: Text('No cancelled rides'))]);
     }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
       children: [
-        const _SectionHeader('Cancelled / Rejected'),
-        ...bookings.map(
-          (booking) => Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-            child: ListTile(
-              leading: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
-              title: Text(booking.passengerName.isEmpty ? 'Booking' : booking.passengerName),
-              subtitle: Text('${booking.seatsBooked} seat(s) · ${booking.bookingStatus.label}'),
-            ),
-          ),
-        ),
+        if (offeredCancelled.isNotEmpty) ...[
+          const _SectionHeader('Cancelled Rides I Offered'),
+          ...offeredCancelled.map((ride) => _CancelledOfferedRideCard(ride: ride)),
+        ],
+        if (bookings.isNotEmpty) ...[
+          const _SectionHeader('Cancelled / Rejected Bookings'),
+          ...bookings.map((booking) => _CancelledBookingCard(
+                booking: booking,
+                ride: ridesById[booking.rideOfferId],
+              )),
+        ],
       ],
+    );
+  }
+}
+
+class _CancelledBookingCard extends StatelessWidget {
+  const _CancelledBookingCard({
+    required this.booking,
+    required this.ride,
+  });
+
+  final RideBooking booking;
+  final RideOffer? ride;
+
+  @override
+  Widget build(BuildContext context) {
+    final routeTitle = ride == null
+        ? 'Cancelled Booking'
+        : LocationDisplayFormatter.routeTitle(ride!.origin, ride!.destination);
+    final cancelledBy = ride?.status == 5 ? 'Driver' : 'You';
+    final cancelledAt = booking.cancelledAtUtc;
+    final reason = booking.cancellationReason?.trim();
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 1.5,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    routeTitle,
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 22),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(14)),
+                  child: const Text('Cancelled', style: TextStyle(color: Color(0xFFB91C1C), fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+            if (ride != null) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.calendar_today_outlined, size: 16),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(DepartureTimeUtils.formatFriendly(ride!.departureTimeUtc, context: 'Trips Cancelled Booking'))),
+                  const Icon(Icons.person_outline, size: 16),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(ride!.driverName.isEmpty ? 'Driver' : ride!.driverName, overflow: TextOverflow.ellipsis)),
+                ],
+              ),
+            ],
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(border: Border.all(color: const Color(0xFFE2E8F0)), borderRadius: BorderRadius.circular(16)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Pickup: ${LocationDisplayFormatter.title(booking.passengerPickup)}'),
+                  const SizedBox(height: 4),
+                  Text('Drop: ${LocationDisplayFormatter.title(booking.passengerDrop)}'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: Text('Seats: ${booking.seatsBooked}')),
+                Expanded(
+                  child: Text(
+                    '${ride?.vehicleName ?? 'Vehicle'} ${ride?.vehicleNumber ?? ''}'.trim(),
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text('Cancelled by: $cancelledBy'),
+            if (reason != null && reason.isNotEmpty) Text('Reason: $reason'),
+            if (cancelledAt != null)
+              Text('Cancelled at: ${DepartureTimeUtils.formatFriendly(cancelledAt, context: 'Trips Cancelled At')}'),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: ride == null ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride!))),
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('View Details'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _CancelledOfferedRideCard extends StatelessWidget {
+  const _CancelledOfferedRideCard({required this.ride});
+
+  final RideOffer ride;
+
+  @override
+  Widget build(BuildContext context) {
+    final reason = ride.cancellationReason?.trim();
+    final cancelledAt = ride.cancelledAtUtc;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 1.5,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    LocationDisplayFormatter.routeTitle(ride.origin, ride.destination),
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 22),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(14)),
+                  child: const Text('Cancelled', style: TextStyle(color: Color(0xFFB91C1C), fontWeight: FontWeight.w700)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.calendar_today_outlined, size: 16),
+                const SizedBox(width: 6),
+                Expanded(child: Text(DepartureTimeUtils.formatFriendly(ride.departureTimeUtc, context: 'Trips Cancelled Offered'))),
+                const Icon(Icons.group_outlined, size: 16),
+                const SizedBox(width: 6),
+                Text('${ride.participantCount} booked'),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(border: Border.all(color: const Color(0xFFE2E8F0)), borderRadius: BorderRadius.circular(16)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Pickup: ${LocationDisplayFormatter.title(ride.origin)}'),
+                  const SizedBox(height: 4),
+                  Text('Drop: ${LocationDisplayFormatter.title(ride.destination)}'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(child: Text('Seats left: ${ride.availableSeats}')),
+                Expanded(
+                  child: Text(
+                    '${ride.vehicleName ?? 'Vehicle'} ${ride.vehicleNumber ?? ''}'.trim(),
+                    textAlign: TextAlign.right,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            const Text('Cancelled by: You'),
+            if (reason != null && reason.isNotEmpty) Text('Reason: $reason'),
+            if (cancelledAt != null)
+              Text('Cancelled at: ${DepartureTimeUtils.formatFriendly(cancelledAt, context: 'Trips Cancelled Ride At')}'),
+            Text('Passenger summary: ${ride.participantCount} booked passenger(s)'),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride))),
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('View Details'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -697,7 +996,7 @@ class _RideCard extends StatelessWidget {
             const SizedBox(height: 10),
             Row(
               children: [
-                Expanded(child: Text('₹${ride.pricePerSeat} / seat')),
+                Expanded(child: Text('â‚¹${ride.pricePerSeat} / seat')),
                 Expanded(
                   child: Text(
                     bookedSeats == null ? '${ride.availableSeats} seats left' : '$bookedSeats seat booked',
@@ -773,3 +1072,4 @@ class _TripFilterChip extends StatelessWidget {
     return ChoiceChip(label: Text(label), selected: selected, onSelected: (_) => onTap());
   }
 }
+
