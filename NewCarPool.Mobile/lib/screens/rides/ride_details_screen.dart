@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -12,7 +14,6 @@ import '../../models/booking_models.dart';
 import '../../models/ride_models.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/booking_provider.dart';
-import '../../services/map_service.dart';
 import '../../services/ride_service.dart';
 import '../../services/tracking_service.dart';
 import 'ride_chat_screen.dart';
@@ -29,11 +30,12 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   final Completer<gmap.GoogleMapController> _mapController = Completer();
   final Distance _distance = const Distance();
   RideOffer? _ride;
-  List<gmap.LatLng> _routePoints = const [];
   gmap.LatLng? _driverLivePoint;
   String? _trackingMessage;
-  bool _routeLoading = false;
   bool _mapMovedByUser = false;
+  gmap.BitmapDescriptor? _pickupMarkerIcon;
+  gmap.BitmapDescriptor? _stopMarkerIcon;
+  gmap.BitmapDescriptor? _destinationMarkerIcon;
   Timer? _driverTimer;
   Timer? _passengerPollTimer;
 
@@ -41,6 +43,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _prepareMarkerIcons();
       final bookingProvider = context.read<BookingProvider>();
       if (bookingProvider.bookings.isEmpty && !bookingProvider.isLoading) {
         await bookingProvider.loadHistory();
@@ -48,9 +51,74 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
       final ride = widget.extra is RideOffer ? widget.extra as RideOffer : null;
       if (ride == null) return;
       setState(() => _ride = ride);
-      await _loadRoutePolyline(ride);
+      await _fitCamera();
       await _syncTracking(ride);
     });
+  }
+
+  Future<void> _prepareMarkerIcons() async {
+    try {
+      final pixelRatio = WidgetsBinding
+          .instance.platformDispatcher.views.first.devicePixelRatio;
+      final pickup = await _buildMarkerIconBytes(
+        const Color(0xFF16A34A),
+        pixelRatio: pixelRatio,
+      );
+      final stop = await _buildMarkerIconBytes(
+        const Color(0xFF2563EB),
+        pixelRatio: pixelRatio,
+      );
+      final destination = await _buildMarkerIconBytes(
+        const Color(0xFFDC2626),
+        pixelRatio: pixelRatio,
+      );
+      if (!mounted) return;
+      setState(() {
+        _pickupMarkerIcon = gmap.BitmapDescriptor.bytes(pickup);
+        _stopMarkerIcon = gmap.BitmapDescriptor.bytes(stop);
+        _destinationMarkerIcon = gmap.BitmapDescriptor.bytes(destination);
+      });
+    } catch (_) {
+      // Keep hue-based fallback markers if custom icon generation fails.
+    }
+  }
+
+  Future<Uint8List> _buildMarkerIconBytes(
+    Color color, {
+    required double pixelRatio,
+  }) async {
+    final scale = pixelRatio.clamp(1.0, 3.0);
+    final width = 44.0 * scale;
+    final height = 54.0 * scale;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, width, height));
+
+    final fill = Paint()..color = color;
+    final stroke = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.4 * scale;
+    final shadow = Paint()..color = Colors.black.withValues(alpha: 0.2);
+
+    final circleCenter = Offset(width / 2, 18.0 * scale);
+    final radius = 12.0 * scale;
+    final tail = ui.Path()
+      ..moveTo(width / 2, 46.0 * scale)
+      ..lineTo((width / 2) - 7.0 * scale, 28.0 * scale)
+      ..lineTo((width / 2) + 7.0 * scale, 28.0 * scale)
+      ..close();
+
+    canvas.drawCircle(circleCenter + Offset(0, 1.5 * scale), radius, shadow);
+    canvas.drawPath(tail.shift(Offset(0, 1.5 * scale)), shadow);
+    canvas.drawCircle(circleCenter, radius, fill);
+    canvas.drawPath(tail, fill);
+    canvas.drawCircle(circleCenter, radius, stroke);
+    canvas.drawPath(tail, stroke);
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(width.ceil(), height.ceil());
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    return bytes!.buffer.asUint8List();
   }
 
   @override
@@ -61,110 +129,14 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     super.dispose();
   }
 
-  Future<void> _loadRoutePolyline(RideOffer ride) async {
-    setState(() => _routeLoading = true);
-    try {
-      final chain = <GeoPoint>[
-        ride.origin,
-        ...ride.intermediateStops.map((s) => GeoPoint(name: s.name, latitude: s.latitude, longitude: s.longitude)),
-        ride.destination,
-      ];
-      final built = <gmap.LatLng>[];
-      for (var i = 0; i < chain.length - 1; i++) {
-        final seg = await context.read<MapService>().route(
-              fromLatitude: chain[i].latitude,
-              fromLongitude: chain[i].longitude,
-              toLatitude: chain[i + 1].latitude,
-              toLongitude: chain[i + 1].longitude,
-            );
-        final decoded = _extractRoutePoints(seg);
-        if (decoded.isEmpty) continue;
-        if (built.isNotEmpty) {
-          built.addAll(decoded.skip(1));
-        } else {
-          built.addAll(decoded);
-        }
-      }
-      if (!mounted) return;
-      final fallback = _fallbackRoutePoints(ride);
-      final cleaned = _sanitizeRoutePoints(built);
-      setState(() => _routePoints = cleaned.length >= 2 ? cleaned : fallback);
-      await _fitCamera();
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _routePoints = _fallbackRoutePoints(ride));
-    } finally {
-      if (mounted) setState(() => _routeLoading = false);
-    }
-  }
-
   List<gmap.LatLng> _fallbackRoutePoints(RideOffer ride) {
     final routePoints = <gmap.LatLng>[
       gmap.LatLng(ride.origin.latitude, ride.origin.longitude),
-      ...ride.intermediateStops.map((s) => gmap.LatLng(s.latitude, s.longitude)),
+      ...ride.intermediateStops
+          .map((s) => gmap.LatLng(s.latitude, s.longitude)),
       gmap.LatLng(ride.destination.latitude, ride.destination.longitude),
     ];
     return _sanitizeRoutePoints(routePoints);
-  }
-
-  List<gmap.LatLng> _extractRoutePoints(Map<String, dynamic> seg) {
-    final fromEncoded = <String>[
-      seg['encodedPolyline']?.toString() ?? '',
-      seg['geometry']?.toString() ?? '',
-      seg['polyline']?.toString() ?? '',
-    ];
-    for (final encoded in fromEncoded) {
-      if (encoded.isEmpty) continue;
-      final decoded = _sanitizeRoutePoints(_decodePolyline(encoded));
-      if (decoded.length >= 2) return decoded;
-    }
-
-    final coordinates = seg['coordinates'];
-    if (coordinates is List) {
-      final points = <gmap.LatLng>[];
-      for (final item in coordinates) {
-        if (item is! List || item.length < 2) continue;
-        final first = (item[0] as num?)?.toDouble();
-        final second = (item[1] as num?)?.toDouble();
-        if (first == null || second == null) continue;
-        // Backend coordinate arrays are usually [longitude, latitude].
-        points.add(gmap.LatLng(second, first));
-      }
-      final cleaned = _sanitizeRoutePoints(points);
-      if (cleaned.length >= 2) return cleaned;
-    }
-    return const [];
-  }
-
-  List<gmap.LatLng> _decodePolyline(String encoded) {
-    if (encoded.isEmpty) return const [];
-    var index = 0;
-    var lat = 0;
-    var lng = 0;
-    final points = <gmap.LatLng>[];
-    while (index < encoded.length) {
-      var b = 0;
-      var shift = 0;
-      var result = 0;
-      do {
-        if (index >= encoded.length) return _sanitizeRoutePoints(points);
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      lat += (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
-      shift = 0;
-      result = 0;
-      do {
-        if (index >= encoded.length) return _sanitizeRoutePoints(points);
-        b = encoded.codeUnitAt(index++) - 63;
-        result |= (b & 0x1f) << shift;
-        shift += 5;
-      } while (b >= 0x20);
-      lng += (result & 1) != 0 ? ~(result >> 1) : (result >> 1);
-      points.add(gmap.LatLng(lat / 1e5, lng / 1e5));
-    }
-    return _sanitizeRoutePoints(points);
   }
 
   List<gmap.LatLng> _sanitizeRoutePoints(List<gmap.LatLng> input) {
@@ -173,7 +145,8 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
       if (!_isValidCoordinate(p.latitude, p.longitude)) continue;
       if (cleaned.isNotEmpty) {
         final prev = cleaned.last;
-        final isDup = (prev.latitude - p.latitude).abs() < 0.000001 && (prev.longitude - p.longitude).abs() < 0.000001;
+        final isDup = (prev.latitude - p.latitude).abs() < 0.000001 &&
+            (prev.longitude - p.longitude).abs() < 0.000001;
         if (isDup) continue;
       }
       cleaned.add(gmap.LatLng(p.latitude, p.longitude));
@@ -182,7 +155,12 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   }
 
   bool _isValidCoordinate(double lat, double lng) {
-    return lat.isFinite && lng.isFinite && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+    return lat.isFinite &&
+        lng.isFinite &&
+        lat >= -90 &&
+        lat <= 90 &&
+        lng >= -180 &&
+        lng <= 180;
   }
 
   Future<void> _syncTracking(RideOffer ride) async {
@@ -197,7 +175,8 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     final myUserId = context.read<AuthProvider>().session?.userId;
     final isDriver = myUserId != null && ride.driverId == myUserId;
     final myBooking = _latestBooking(ride.id);
-    final isBookedPassenger = myBooking != null && myBooking.bookingStatus == BookingStatus.accepted;
+    final isBookedPassenger =
+        myBooking != null && myBooking.bookingStatus == BookingStatus.accepted;
 
     if (isDriver) {
       await _startDriverTracking(ride);
@@ -212,7 +191,11 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
 
   RideBooking? _latestBooking(String rideId) {
     final myUserId = context.read<AuthProvider>().session?.userId;
-    final list = context.read<BookingProvider>().bookings.where((b) => b.rideOfferId == rideId && b.passengerId == myUserId).toList()
+    final list = context
+        .read<BookingProvider>()
+        .bookings
+        .where((b) => b.rideOfferId == rideId && b.passengerId == myUserId)
+        .toList()
       ..sort((a, b) => b.createdAtUtc.compareTo(a.createdAtUtc));
     return list.isEmpty ? null : list.first;
   }
@@ -223,14 +206,18 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
-    if (!enabled || permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+    if (!enabled ||
+        permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
       if (!mounted) return;
-      setState(() => _trackingMessage = 'Location permission is required for live tracking.');
+      setState(() => _trackingMessage =
+          'Location permission is required for live tracking.');
       return;
     }
 
     if (mounted) {
-      setState(() => _trackingMessage = 'Your live location is being shared with passengers.');
+      setState(() => _trackingMessage =
+          'Your live location is being shared with passengers.');
     }
 
     Future<void> tick() async {
@@ -256,7 +243,8 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
 
   Future<void> _startPassengerTracking(RideOffer ride) async {
     Future<void> fetchLatest() async {
-      final data = await context.read<TrackingService>().latestLocation(ride.id);
+      final data =
+          await context.read<TrackingService>().latestLocation(ride.id);
       if (!mounted) return;
       if (data == null) {
         setState(() => _trackingMessage = 'Waiting for driver location...');
@@ -273,7 +261,8 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     }
 
     await fetchLatest();
-    _passengerPollTimer = Timer.periodic(const Duration(seconds: 10), (_) => fetchLatest());
+    _passengerPollTimer =
+        Timer.periodic(const Duration(seconds: 10), (_) => fetchLatest());
     try {
       await context.read<TrackingService>().connect(ride.id, (payload) async {
         final lat = (payload['latitude'] as num?)?.toDouble();
@@ -296,8 +285,6 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
 
     final pts = _sanitizeRoutePoints([
       ..._fallbackRoutePoints(ride),
-      ..._routePoints,
-      if (_driverLivePoint != null) _driverLivePoint!,
     ]);
     if (pts.length < 2) return;
     var minLat = pts.first.latitude;
@@ -330,14 +317,17 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     setState(() => _ride = updated);
     await _syncTracking(updated);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ride completed')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Ride completed')));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final ride = _ride;
-    if (ride == null) return const Scaffold(body: Center(child: Text('Ride details unavailable')));
+    if (ride == null)
+      return const Scaffold(
+          body: Center(child: Text('Ride details unavailable')));
     final myUserId = context.watch<AuthProvider>().session?.userId;
     final isDriver = myUserId != null && ride.driverId == myUserId;
     final isStarted = ride.status == 3;
@@ -346,7 +336,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     final etaMin = _etaMinutes(myBooking);
     final isDesktop = MediaQuery.of(context).size.width >= 1100;
 
-    final markers = _buildMarkers(ride, myBooking);
+    final markers = _buildMarkers(ride);
 
     final mapCard = _MapCard(
       ride: ride,
@@ -356,15 +346,15 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
       distanceKm: distanceKm,
       etaMin: etaMin,
       markers: markers,
-      routePoints: _routePoints,
       mapController: _mapController,
-      routeLoading: _routeLoading,
       onUserMove: () => _mapMovedByUser = true,
       onMyLocation: () async {
         if (!_mapController.isCompleted) return;
         final c = await _mapController.future;
-        final fallback = gmap.LatLng(ride.origin.latitude, ride.origin.longitude);
-        await c.animateCamera(gmap.CameraUpdate.newLatLngZoom(_driverLivePoint ?? fallback, 14));
+        final fallback =
+            gmap.LatLng(ride.origin.latitude, ride.origin.longitude);
+        await c.animateCamera(
+            gmap.CameraUpdate.newLatLngZoom(_driverLivePoint ?? fallback, 14));
       },
     );
 
@@ -373,20 +363,26 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
       myBooking: myBooking,
       isDriver: isDriver,
       trackingMessage: _trackingMessage,
-      onChat: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
+      onChat: () => Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
     );
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FC),
       appBar: AppBar(
-        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).maybePop()),
+        leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).maybePop()),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Ride Details'),
             Text(
               'Ride ID: #${ride.id.substring(0, 8).toUpperCase()}',
-              style: const TextStyle(fontSize: 13, color: Color(0xFF6B7280), fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF6B7280),
+                  fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -398,13 +394,17 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                 children: [
                   Icon(Icons.flutter_dash, color: Color(0xFF4F46E5)),
                   SizedBox(width: 6),
-                  Text('NewCarPool', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1D4ED8))),
+                  Text('NewCarPool',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF1D4ED8))),
                 ],
               ),
             ),
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline),
-            onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
+            onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
           ),
           IconButton(icon: const Icon(Icons.call_outlined), onPressed: () {}),
         ],
@@ -427,7 +427,10 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                             children: [
                               Expanded(
                                 child: OutlinedButton.icon(
-                                  onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
+                                  onPressed: () => Navigator.of(context).push(
+                                      MaterialPageRoute(
+                                          builder: (_) =>
+                                              RideChatScreen(ride: ride))),
                                   icon: const Icon(Icons.chat_bubble_outline),
                                   label: const Text('Chat with Driver'),
                                 ),
@@ -438,8 +441,12 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                                   onPressed: () async {
                                     if (!_mapController.isCompleted) return;
                                     final c = await _mapController.future;
-                                    final fallback = gmap.LatLng(ride.origin.latitude, ride.origin.longitude);
-                                    await c.animateCamera(gmap.CameraUpdate.newLatLngZoom(_driverLivePoint ?? fallback, 14));
+                                    final fallback = gmap.LatLng(
+                                        ride.origin.latitude,
+                                        ride.origin.longitude);
+                                    await c.animateCamera(
+                                        gmap.CameraUpdate.newLatLngZoom(
+                                            _driverLivePoint ?? fallback, 14));
                                   },
                                   icon: const Icon(Icons.map_outlined),
                                   label: const Text('View on Map'),
@@ -450,8 +457,11 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                                 Expanded(
                                   child: FilledButton.icon(
                                     onPressed: _completeRide,
-                                    style: FilledButton.styleFrom(backgroundColor: const Color(0xFF4F46E5)),
-                                    icon: const Icon(Icons.check_circle_outline),
+                                    style: FilledButton.styleFrom(
+                                        backgroundColor:
+                                            const Color(0xFF4F46E5)),
+                                    icon:
+                                        const Icon(Icons.check_circle_outline),
                                     label: const Text('Complete Ride'),
                                   ),
                                 ),
@@ -462,7 +472,9 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                       ),
                     ),
                     const SizedBox(width: 12),
-                    Expanded(flex: 5, child: SingleChildScrollView(child: rightPanel)),
+                    Expanded(
+                        flex: 5,
+                        child: SingleChildScrollView(child: rightPanel)),
                   ],
                 ),
               )
@@ -473,8 +485,14 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                     child: Container(
                       decoration: const BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-                        boxShadow: [BoxShadow(color: Color(0x19000000), blurRadius: 14, offset: Offset(0, -4))],
+                        borderRadius:
+                            BorderRadius.vertical(top: Radius.circular(24)),
+                        boxShadow: [
+                          BoxShadow(
+                              color: Color(0x19000000),
+                              blurRadius: 14,
+                              offset: Offset(0, -4))
+                        ],
                       ),
                       child: SingleChildScrollView(
                         padding: const EdgeInsets.fromLTRB(12, 10, 12, 120),
@@ -483,7 +501,9 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                             Container(
                               width: 42,
                               height: 5,
-                              decoration: BoxDecoration(color: const Color(0xFFD1D5DB), borderRadius: BorderRadius.circular(99)),
+                              decoration: BoxDecoration(
+                                  color: const Color(0xFFD1D5DB),
+                                  borderRadius: BorderRadius.circular(99)),
                             ),
                             const SizedBox(height: 12),
                             rightPanel,
@@ -503,7 +523,9 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
+                      onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => RideChatScreen(ride: ride))),
                       icon: const Icon(Icons.chat_bubble_outline),
                       label: const Text('Chat with Driver'),
                     ),
@@ -516,12 +538,20 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                           : () async {
                               if (!_mapController.isCompleted) return;
                               final c = await _mapController.future;
-                              final fallback = gmap.LatLng(ride.origin.latitude, ride.origin.longitude);
-                              await c.animateCamera(gmap.CameraUpdate.newLatLngZoom(_driverLivePoint ?? fallback, 14));
+                              final fallback = gmap.LatLng(
+                                  ride.origin.latitude, ride.origin.longitude);
+                              await c.animateCamera(
+                                  gmap.CameraUpdate.newLatLngZoom(
+                                      _driverLivePoint ?? fallback, 14));
                             },
-                      style: FilledButton.styleFrom(backgroundColor: const Color(0xFF4F46E5)),
-                      icon: Icon(isDriver && isStarted ? Icons.check_circle_outline : Icons.near_me_outlined),
-                      label: Text(isDriver && isStarted ? 'Complete Ride' : 'View on Map'),
+                      style: FilledButton.styleFrom(
+                          backgroundColor: const Color(0xFF4F46E5)),
+                      icon: Icon(isDriver && isStarted
+                          ? Icons.check_circle_outline
+                          : Icons.near_me_outlined),
+                      label: Text(isDriver && isStarted
+                          ? 'Complete Ride'
+                          : 'View on Map'),
                     ),
                   ),
                 ],
@@ -530,58 +560,54 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     );
   }
 
-  Set<gmap.Marker> _buildMarkers(RideOffer ride, RideBooking? myBooking) {
+  Set<gmap.Marker> _buildMarkers(RideOffer ride) {
     return {
       gmap.Marker(
         markerId: const gmap.MarkerId('origin'),
         position: gmap.LatLng(ride.origin.latitude, ride.origin.longitude),
-        icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueGreen),
-        infoWindow: gmap.InfoWindow(title: 'Pickup', snippet: LocationDisplayFormatter.title(ride.origin)),
+        icon: _pickupMarkerIcon ??
+            gmap.BitmapDescriptor.defaultMarkerWithHue(
+              gmap.BitmapDescriptor.hueGreen,
+            ),
+        infoWindow: gmap.InfoWindow(
+            title: 'Pickup',
+            snippet: LocationDisplayFormatter.title(ride.origin)),
       ),
       gmap.Marker(
         markerId: const gmap.MarkerId('destination'),
-        position: gmap.LatLng(ride.destination.latitude, ride.destination.longitude),
-        icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueRed),
-        infoWindow: gmap.InfoWindow(title: 'Drop', snippet: LocationDisplayFormatter.title(ride.destination)),
+        position:
+            gmap.LatLng(ride.destination.latitude, ride.destination.longitude),
+        icon: _destinationMarkerIcon ??
+            gmap.BitmapDescriptor.defaultMarkerWithHue(
+              gmap.BitmapDescriptor.hueRed,
+            ),
+        infoWindow: gmap.InfoWindow(
+            title: 'Destination',
+            snippet: LocationDisplayFormatter.title(ride.destination)),
       ),
       ...ride.intermediateStops.asMap().entries.map(
             (e) => gmap.Marker(
               markerId: gmap.MarkerId('stop-${e.key}'),
               position: gmap.LatLng(e.value.latitude, e.value.longitude),
-              icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueAzure),
-              infoWindow: gmap.InfoWindow(title: 'Stop ${e.key + 1}', snippet: e.value.name),
+              icon: _stopMarkerIcon ??
+                  gmap.BitmapDescriptor.defaultMarkerWithHue(
+                    gmap.BitmapDescriptor.hueBlue,
+                  ),
+              infoWindow: gmap.InfoWindow(
+                  title: 'Stop ${e.key + 1}', snippet: e.value.name),
             ),
           ),
-      if (_driverLivePoint != null)
-        gmap.Marker(
-          markerId: const gmap.MarkerId('driver'),
-          position: _driverLivePoint!,
-          icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueBlue),
-          infoWindow: const gmap.InfoWindow(title: 'Driver'),
-        ),
-      if (myBooking?.passengerPickup != null)
-        gmap.Marker(
-          markerId: const gmap.MarkerId('my-pickup'),
-          position: gmap.LatLng(myBooking!.passengerPickup!.latitude, myBooking.passengerPickup!.longitude),
-          icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueGreen),
-          infoWindow: gmap.InfoWindow(title: 'Your Pickup', snippet: LocationDisplayFormatter.title(myBooking.passengerPickup)),
-        ),
-      if (myBooking?.passengerDrop != null)
-        gmap.Marker(
-          markerId: const gmap.MarkerId('my-drop'),
-          position: gmap.LatLng(myBooking!.passengerDrop!.latitude, myBooking.passengerDrop!.longitude),
-          icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueRed),
-          infoWindow: gmap.InfoWindow(title: 'Your Drop', snippet: LocationDisplayFormatter.title(myBooking.passengerDrop)),
-        ),
     };
   }
 
   double _driverDistanceKm(RideBooking? booking) {
-    if (_driverLivePoint == null || booking?.passengerPickup == null) return 2.4;
+    if (_driverLivePoint == null || booking?.passengerPickup == null)
+      return 2.4;
     return _distance.as(
           LengthUnit.Kilometer,
           LatLng(_driverLivePoint!.latitude, _driverLivePoint!.longitude),
-          LatLng(booking!.passengerPickup!.latitude, booking.passengerPickup!.longitude),
+          LatLng(booking!.passengerPickup!.latitude,
+              booking.passengerPickup!.longitude),
         ) +
         0.0001;
   }
@@ -591,7 +617,8 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     final meters = _distance.as(
       LengthUnit.Meter,
       LatLng(_driverLivePoint!.latitude, _driverLivePoint!.longitude),
-      LatLng(booking!.passengerPickup!.latitude, booking.passengerPickup!.longitude),
+      LatLng(booking!.passengerPickup!.latitude,
+          booking.passengerPickup!.longitude),
     );
     return (meters / 350).ceil().clamp(3, 50);
   }
@@ -606,9 +633,7 @@ class _MapCard extends StatelessWidget {
     required this.distanceKm,
     required this.etaMin,
     required this.markers,
-    required this.routePoints,
     required this.mapController,
-    required this.routeLoading,
     required this.onUserMove,
     required this.onMyLocation,
   });
@@ -620,15 +645,14 @@ class _MapCard extends StatelessWidget {
   final double distanceKm;
   final int etaMin;
   final Set<gmap.Marker> markers;
-  final List<gmap.LatLng> routePoints;
   final Completer<gmap.GoogleMapController> mapController;
-  final bool routeLoading;
   final VoidCallback onUserMove;
   final VoidCallback onMyLocation;
 
   @override
   Widget build(BuildContext context) {
-    final center = driverLivePoint ?? gmap.LatLng(ride.origin.latitude, ride.origin.longitude);
+    final center = driverLivePoint ??
+        gmap.LatLng(ride.origin.latitude, ride.origin.longitude);
     return Card(
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
@@ -636,7 +660,8 @@ class _MapCard extends StatelessWidget {
       child: Stack(
         children: [
           gmap.GoogleMap(
-            initialCameraPosition: gmap.CameraPosition(target: center, zoom: 12),
+            initialCameraPosition:
+                gmap.CameraPosition(target: center, zoom: 12),
             onMapCreated: (c) {
               if (!mapController.isCompleted) mapController.complete(c);
             },
@@ -645,31 +670,24 @@ class _MapCard extends StatelessWidget {
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
             markers: markers,
-            polylines: {
-              if (routePoints.length > 1)
-                gmap.Polyline(
-                  polylineId: const gmap.PolylineId('route'),
-                  width: 6,
-                  color: const Color(0xFF4F46E5),
-                  points: routePoints,
-                  geodesic: true,
-                ),
-            },
+            polylines: const {},
           ),
-          if (routeLoading) const Positioned(left: 12, right: 12, top: 12, child: LinearProgressIndicator()),
           if (isStarted)
             Positioned(
               left: 14,
               top: 14,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF6D28D9), Color(0xFF2563EB)]),
+                  gradient: const LinearGradient(
+                      colors: [Color(0xFF6D28D9), Color(0xFF2563EB)]),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Text(
                   'Ride Started\n${trackingMessage == null || trackingMessage!.isEmpty ? 'Driver is on the way' : trackingMessage!}',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                      color: Colors.white, fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -714,9 +732,15 @@ class _MapCard extends StatelessWidget {
             bottom: 14,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: const [
-                BoxShadow(color: Color(0x22000000), blurRadius: 8, offset: Offset(0, 3)),
-              ]),
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: const [
+                    BoxShadow(
+                        color: Color(0x22000000),
+                        blurRadius: 8,
+                        offset: Offset(0, 3)),
+                  ]),
               child: Text('ETA $etaMin min'),
             ),
           ),
@@ -726,10 +750,17 @@ class _MapCard extends StatelessWidget {
               top: 180,
               child: Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), boxShadow: const [
-                  BoxShadow(color: Color(0x22000000), blurRadius: 8, offset: Offset(0, 3)),
-                ]),
-                child: Text('Driver on the way\n${distanceKm.toStringAsFixed(1)} km'),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: const [
+                      BoxShadow(
+                          color: Color(0x22000000),
+                          blurRadius: 8,
+                          offset: Offset(0, 3)),
+                    ]),
+                child: Text(
+                    'Driver on the way\n${distanceKm.toStringAsFixed(1)} km'),
               ),
             ),
         ],
@@ -776,10 +807,20 @@ class _RightPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final started = ride.status == 3;
-    final timeline = [
-      ('Pickup Point', LocationDisplayFormatter.title(myBooking?.passengerPickup ?? ride.origin), const Color(0xFF16A34A)),
-      ...ride.intermediateStops.take(1).map((s) => ('Stop Point (En-route)', s.name, const Color(0xFF4F46E5))),
-      ('Drop Point', LocationDisplayFormatter.title(myBooking?.passengerDrop ?? ride.destination), const Color(0xFFDC2626)),
+    final timeline = <(String, String, Color)>[
+      (
+        'Pickup Point',
+        LocationDisplayFormatter.title(ride.origin),
+        const Color(0xFF16A34A)
+      ),
+      ...ride.intermediateStops.asMap().entries.map(
+            (e) => ('Stop ${e.key + 1}', e.value.name, const Color(0xFF2563EB)),
+          ),
+      (
+        'Destination Point',
+        LocationDisplayFormatter.title(ride.destination),
+        const Color(0xFFDC2626)
+      ),
     ];
     return Column(
       children: [
@@ -787,9 +828,13 @@ class _RightPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Trip Summary', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 26)),
+              const Text('Trip Summary',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 26)),
               const SizedBox(height: 10),
-              _KVRow('Date & Time', DepartureTimeUtils.formatFriendly(ride.departureTimeUtc, context: 'Ride Details Summary')),
+              _KVRow(
+                  'Date & Time',
+                  DepartureTimeUtils.formatFriendly(ride.departureTimeUtc,
+                      context: 'Ride Details Summary')),
               _KVRow('Seat(s) Booked', '${myBooking?.seatsBooked ?? 1} Seat'),
               _KVRow('Booking Status', _statusLabel(ride.status)),
             ],
@@ -803,8 +848,12 @@ class _RightPanel extends StatelessWidget {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    trackingMessage ?? (isDriver ? 'Your live location is being shared with passengers.' : 'Live tracking has started. You can see driver’s real-time location.'),
-                    style: const TextStyle(color: Color(0xFF1D4ED8), fontWeight: FontWeight.w600),
+                    trackingMessage ??
+                        (isDriver
+                            ? 'Your live location is being shared with passengers.'
+                            : 'Live tracking has started. You can see driver’s real-time location.'),
+                    style: const TextStyle(
+                        color: Color(0xFF1D4ED8), fontWeight: FontWeight.w600),
                   ),
                 ),
               ],
@@ -819,17 +868,26 @@ class _RightPanel extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(ride.driverName.isEmpty ? 'Driver' : ride.driverName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 24)),
+                    Text(ride.driverName.isEmpty ? 'Driver' : ride.driverName,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 24)),
                     const SizedBox(height: 4),
-                    Text('★ 4.8  •  56 rides', style: TextStyle(color: Colors.grey.shade600)),
+                    Text('★ 4.8  •  56 rides',
+                        style: TextStyle(color: Colors.grey.shade600)),
                     const SizedBox(height: 4),
-                    Text('${ride.vehicleName ?? 'Vehicle'} • ${ride.vehicleNumber ?? ''}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                    const Text('Black', style: TextStyle(color: Color(0xFF6B7280))),
+                    Text(
+                        '${ride.vehicleName ?? 'Vehicle'} • ${ride.vehicleNumber ?? ''}',
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
+                    const Text('Black',
+                        style: TextStyle(color: Color(0xFF6B7280))),
                   ],
                 ),
               ),
-              IconButton(onPressed: onChat, icon: const Icon(Icons.chat_bubble_outline)),
-              IconButton(onPressed: () {}, icon: const Icon(Icons.call_outlined)),
+              IconButton(
+                  onPressed: onChat,
+                  icon: const Icon(Icons.chat_bubble_outline)),
+              IconButton(
+                  onPressed: () {}, icon: const Icon(Icons.call_outlined)),
             ],
           ),
         ),
@@ -837,7 +895,8 @@ class _RightPanel extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Trip Route', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 24)),
+              const Text('Trip Route',
+                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 24)),
               const SizedBox(height: 10),
               ...timeline.map((t) => Padding(
                     padding: const EdgeInsets.only(bottom: 10),
@@ -883,9 +942,12 @@ class _VehicleFooterCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Vehicle Details', style: TextStyle(fontWeight: FontWeight.w700)),
-                Text('${ride.vehicleName ?? 'Vehicle'} • ${ride.vehicleNumber ?? ''}'),
-                const Text('Black • Luxury', style: TextStyle(color: Color(0xFF6B7280))),
+                const Text('Vehicle Details',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                Text(
+                    '${ride.vehicleName ?? 'Vehicle'} • ${ride.vehicleNumber ?? ''}'),
+                const Text('Black • Luxury',
+                    style: TextStyle(color: Color(0xFF6B7280))),
               ],
             ),
           ),
@@ -926,7 +988,8 @@ class _KVRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          Expanded(child: Text(k, style: const TextStyle(color: Color(0xFF6B7280)))),
+          Expanded(
+              child: Text(k, style: const TextStyle(color: Color(0xFF6B7280)))),
           Text(v, style: const TextStyle(fontWeight: FontWeight.w700)),
         ],
       ),

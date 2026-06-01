@@ -37,9 +37,12 @@ class AuthValidators {
       return required;
     }
 
-    if (value!.trim().length < 8) {
-      return 'Enter a valid phone number';
+    final phone = value!.trim();
+
+    if (!RegExp(r'^[6-9]\d{9}$').hasMatch(phone)) {
+      return 'Enter a valid 10 digit phone number';
     }
+
     return null;
   }
 }
