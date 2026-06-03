@@ -11,7 +11,7 @@ namespace NewCarPool.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/[controller]")]
+[Route("api/rides")]
 public sealed class RidesController : ControllerBase
 {
     private readonly IRideService _rideService;
@@ -80,6 +80,28 @@ public sealed class RidesController : ControllerBase
         CancellationToken cancellationToken) =>
         Ok(await _rideService.SendRideChatMessageAsync(User.GetUserId(), rideOfferId, request, cancellationToken));
 
+    [HttpPost("{rideId:guid}/chat/attachments")]
+    [Consumes("multipart/form-data")]
+    public async Task<ActionResult<RideChatMessageDto>> UploadChatAttachment(
+        Guid rideId,
+        [FromForm] RideChatAttachmentUploadRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (request.File is null || request.File.Length == 0)
+        {
+            throw new ApiException("File is required.");
+        }
+
+        await using var stream = request.File.OpenReadStream();
+        var upload = new ChatAttachmentUpload(
+            stream,
+            request.File.FileName,
+            request.File.ContentType,
+            request.File.Length,
+            request.Caption);
+        return Ok(await _rideService.UploadChatAttachmentAsync(rideId, User.GetUserId(), upload, cancellationToken));
+    }
+
     [HttpPost("{rideOfferId:guid}/start")]
     public async Task<ActionResult<RideOfferDto>> Start(Guid rideOfferId, CancellationToken cancellationToken) =>
         Ok(await _rideService.StartRideAsync(User.GetUserId(), rideOfferId, cancellationToken));
@@ -101,4 +123,10 @@ public sealed class RidesController : ControllerBase
         [FromBody] CancelActionRequest? request,
         CancellationToken cancellationToken) =>
         Ok(await _bookingService.CancelAsync(User.GetUserId(), bookingId, request?.Reason, cancellationToken));
+}
+
+public sealed class RideChatAttachmentUploadRequest
+{
+    public IFormFile File { get; set; } = default!;
+    public string? Caption { get; set; }
 }

@@ -5,6 +5,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart' as gmap;
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/utils/location_permission_helper.dart';
 import '../../core/widgets/app_design_system.dart';
 import '../../services/tracking_service.dart';
 
@@ -19,11 +20,41 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   final _rideOfferIdController = TextEditingController();
   final Completer<gmap.GoogleMapController> _mapController = Completer();
 
-  LatLng driverLocation = const LatLng(12.9716, 77.5946);
+  LatLng driverLocation = const LatLng(
+    LocationPermissionHelper.indoreLatitude,
+    LocationPermissionHelper.indoreLongitude,
+  );
   final List<LatLng> trailPoints = [];
   bool connected = false;
   bool autoFollow = true;
   double _mapZoom = 13;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initializeMapCenter());
+  }
+
+  Future<void> _initializeMapCenter() async {
+    final location = await LocationPermissionHelper.currentOrFallback();
+    if (!mounted) return;
+    final next = LatLng(location.latitude, location.longitude);
+    setState(() => driverLocation = next);
+    if (location.message != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(location.message!)),
+      );
+    }
+    if (_mapController.isCompleted) {
+      final controller = await _mapController.future;
+      await controller.animateCamera(
+        gmap.CameraUpdate.newLatLngZoom(
+          gmap.LatLng(next.latitude, next.longitude),
+          14,
+        ),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -142,8 +173,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                       markers: {
                         gmap.Marker(
                           markerId: const gmap.MarkerId('driver'),
-                          position: gmap.LatLng(
-                              driverLocation.latitude, driverLocation.longitude),
+                          position: gmap.LatLng(driverLocation.latitude,
+                              driverLocation.longitude),
                         ),
                       },
                       polylines: {
@@ -151,7 +182,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                           gmap.Polyline(
                             polylineId: const gmap.PolylineId('trail'),
                             points: trailPoints
-                                .map((p) => gmap.LatLng(p.latitude, p.longitude))
+                                .map(
+                                    (p) => gmap.LatLng(p.latitude, p.longitude))
                                 .toList(),
                             color: Colors.blue,
                             width: 4,
@@ -170,7 +202,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     onZoomIn: () => _mapController.future.then(
                       (c) => c.animateCamera(
                         gmap.CameraUpdate.newLatLngZoom(
-                          gmap.LatLng(driverLocation.latitude, driverLocation.longitude),
+                          gmap.LatLng(driverLocation.latitude,
+                              driverLocation.longitude),
                           (_mapZoom + 1).clamp(4, 18).toDouble(),
                         ),
                       ),
@@ -178,7 +211,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     onZoomOut: () => _mapController.future.then(
                       (c) => c.animateCamera(
                         gmap.CameraUpdate.newLatLngZoom(
-                          gmap.LatLng(driverLocation.latitude, driverLocation.longitude),
+                          gmap.LatLng(driverLocation.latitude,
+                              driverLocation.longitude),
                           (_mapZoom - 1).clamp(4, 18).toDouble(),
                         ),
                       ),
@@ -186,7 +220,8 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     onRecenter: () => _mapController.future.then(
                       (c) => c.animateCamera(
                         gmap.CameraUpdate.newLatLngZoom(
-                          gmap.LatLng(driverLocation.latitude, driverLocation.longitude),
+                          gmap.LatLng(driverLocation.latitude,
+                              driverLocation.longitude),
                           15,
                         ),
                       ),

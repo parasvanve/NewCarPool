@@ -62,20 +62,37 @@ public sealed class MapService : IMapService
         return await CalculateWithOsrmAsync(request, cancellationToken);
     }
 
-    public async Task<IReadOnlyList<GeocodeResultDto>> SearchPlacesAsync(string query, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<GeocodeResultDto>> SearchPlacesAsync(
+        string query,
+        double? latitude,
+        double? longitude,
+        CancellationToken cancellationToken)
     {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return [];
+        }
+
         var client = _httpClientFactory.CreateClient("Nominatim");
-        var response = await client.GetFromJsonAsync<JsonElement[]>($"/search?q={Uri.EscapeDataString(query)}&format=json&limit=10", cancellationToken);
+        var endpoint =
+            $"/search?q={Uri.EscapeDataString(query.Trim())}" +
+            "&format=json&limit=20&addressdetails=1&namedetails=1&extratags=1&countrycodes=in";
+        if (latitude is not null && longitude is not null)
+        {
+            var delta = 0.8d;
+            var left = (longitude.Value - delta).ToString(CultureInfo.InvariantCulture);
+            var right = (longitude.Value + delta).ToString(CultureInfo.InvariantCulture);
+            var top = (latitude.Value + delta).ToString(CultureInfo.InvariantCulture);
+            var bottom = (latitude.Value - delta).ToString(CultureInfo.InvariantCulture);
+            endpoint += $"&viewbox={left},{top},{right},{bottom}&bounded=0";
+        }
+
+        var response = await client.GetFromJsonAsync<JsonElement[]>(endpoint, cancellationToken);
         return response?
-            .Select(x => new GeocodeResultDto(
-                x.GetProperty("display_name").GetString() ?? string.Empty,
-                double.Parse(x.GetProperty("lat").GetString() ?? "0", CultureInfo.InvariantCulture),
-                double.Parse(x.GetProperty("lon").GetString() ?? "0", CultureInfo.InvariantCulture),
-                x.TryGetProperty("name", out var nameNode) ? nameNode.GetString() : null,
-                x.GetProperty("display_name").GetString(),
-                x.TryGetProperty("place_id", out var placeIdNode) ? placeIdNode.GetInt64() : null,
-                GetMainText(x.GetProperty("display_name").GetString() ?? string.Empty),
-                GetSecondaryText(x.GetProperty("display_name").GetString() ?? string.Empty)))
+            .Select(x => ToGeocodeResult(x, latitude, longitude))
+            .OrderByDescending(x => ScoreMatch(query, x, latitude, longitude))
+            .ThenBy(x => x.DistanceKm ?? double.MaxValue)
+            .Take(15)
             .ToList() ?? [];
     }
 
@@ -89,8 +106,86 @@ public sealed class MapService : IMapService
             ? display.GetString() ?? "Current location"
             : "Current location";
         var name = response.TryGetProperty("name", out var nameNode) ? nameNode.GetString() : null;
-        return new ReverseGeocodeResultDto(displayName, latitude, longitude, name, displayName);
+        return new ReverseGeocodeResultDto(displayName, latitude, longitude, name ?? GetMainText(displayName), displayName);
     }
+
+    private static GeocodeResultDto ToGeocodeResult(JsonElement element, double? latitude, double? longitude)
+    {
+        var displayName = element.GetProperty("display_name").GetString() ?? string.Empty;
+        var resultLatitude = double.Parse(element.GetProperty("lat").GetString() ?? "0", CultureInfo.InvariantCulture);
+        var resultLongitude = double.Parse(element.GetProperty("lon").GetString() ?? "0", CultureInfo.InvariantCulture);
+        var name = GetPlaceName(element, displayName);
+        double? distanceKm = latitude is null || longitude is null
+            ? null
+            : Math.Round(DistanceKm(latitude.Value, longitude.Value, resultLatitude, resultLongitude), 2);
+
+        return new GeocodeResultDto(
+            displayName,
+            resultLatitude,
+            resultLongitude,
+            name,
+            displayName,
+            element.TryGetProperty("place_id", out var placeIdNode) ? placeIdNode.GetInt64() : null,
+            name,
+            GetSecondaryText(displayName),
+            distanceKm);
+    }
+
+    private static string GetPlaceName(JsonElement element, string displayName)
+    {
+        if (element.TryGetProperty("namedetails", out var namedetails))
+        {
+            foreach (var key in new[] { "name", "name:en", "official_name", "short_name" })
+            {
+                if (namedetails.TryGetProperty(key, out var value) && !string.IsNullOrWhiteSpace(value.GetString()))
+                {
+                    return value.GetString()!;
+                }
+            }
+        }
+
+        if (element.TryGetProperty("name", out var nameNode) && !string.IsNullOrWhiteSpace(nameNode.GetString()))
+        {
+            return nameNode.GetString()!;
+        }
+
+        return GetMainText(displayName);
+    }
+
+    private static double ScoreMatch(string query, GeocodeResultDto result, double? latitude, double? longitude)
+    {
+        var normalizedQuery = query.Trim().ToLowerInvariant();
+        var name = (result.MainText ?? result.Name ?? string.Empty).ToLowerInvariant();
+        var display = result.DisplayName.ToLowerInvariant();
+        var score = 0d;
+
+        if (name == normalizedQuery) score += 100;
+        if (name.StartsWith(normalizedQuery, StringComparison.OrdinalIgnoreCase)) score += 50;
+        if (name.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase)) score += 30;
+        if (display.Contains(normalizedQuery, StringComparison.OrdinalIgnoreCase)) score += 10;
+        if (latitude is not null && longitude is not null && result.DistanceKm is not null)
+        {
+            score += Math.Max(0, 20 - result.DistanceKm.Value);
+        }
+
+        return score;
+    }
+
+    private static double DistanceKm(double fromLatitude, double fromLongitude, double toLatitude, double toLongitude)
+    {
+        const double earthRadiusKm = 6371d;
+        var dLat = ToRadians(toLatitude - fromLatitude);
+        var dLon = ToRadians(toLongitude - fromLongitude);
+        var lat1 = ToRadians(fromLatitude);
+        var lat2 = ToRadians(toLatitude);
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(lat1) * Math.Cos(lat2) *
+                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        return earthRadiusKm * c;
+    }
+
+    private static double ToRadians(double degrees) => degrees * Math.PI / 180d;
 
     private static string GetMainText(string displayName)
     {

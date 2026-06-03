@@ -89,7 +89,25 @@ class LocationDisplayFormatter {
       'mainText': main,
       'secondaryText': secondary,
       'placeId': raw['placeId'] ?? raw['place_id'],
+      'distanceKm': raw['distanceKm'] ?? raw['distance_km'],
     };
+  }
+
+  static String subtitleWithDistance(dynamic location) {
+    final base = subtitle(location);
+    final distance = distanceText(location);
+    if (distance == null) return base;
+    return base.isEmpty ? distance : '$base • $distance';
+  }
+
+  static String? distanceText(dynamic location) {
+    final map = _asMap(location);
+    final raw = map?['distanceKm'] ?? map?['distance_km'];
+    final distance =
+        raw is num ? raw.toDouble() : double.tryParse(raw?.toString() ?? '');
+    if (distance == null) return null;
+    if (distance < 1) return '${(distance * 1000).round()} m away';
+    return '${distance.toStringAsFixed(distance < 10 ? 1 : 0)} km away';
   }
 
   static Map<String, dynamic>? _asMap(dynamic location) {

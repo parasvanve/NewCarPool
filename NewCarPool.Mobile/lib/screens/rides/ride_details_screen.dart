@@ -9,6 +9,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/utils/departure_time_utils.dart';
+import '../../core/utils/location_permission_helper.dart';
 import '../../core/utils/location_display_formatter.dart';
 import '../../models/booking_models.dart';
 import '../../models/ride_models.dart';
@@ -38,12 +39,17 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   gmap.BitmapDescriptor? _destinationMarkerIcon;
   Timer? _driverTimer;
   Timer? _passengerPollTimer;
+  gmap.LatLng _fallbackMapCenter = const gmap.LatLng(
+    LocationPermissionHelper.indoreLatitude,
+    LocationPermissionHelper.indoreLongitude,
+  );
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await _prepareMarkerIcons();
+      await _initializeFallbackMapCenter();
       final bookingProvider = context.read<BookingProvider>();
       if (bookingProvider.bookings.isEmpty && !bookingProvider.isLoading) {
         await bookingProvider.loadHistory();
@@ -53,6 +59,14 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
       setState(() => _ride = ride);
       await _fitCamera();
       await _syncTracking(ride);
+    });
+  }
+
+  Future<void> _initializeFallbackMapCenter() async {
+    final location = await LocationPermissionHelper.currentOrFallback();
+    if (!mounted) return;
+    setState(() {
+      _fallbackMapCenter = gmap.LatLng(location.latitude, location.longitude);
     });
   }
 
@@ -201,17 +215,10 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   }
 
   Future<void> _startDriverTracking(RideOffer ride) async {
-    final enabled = await Geolocator.isLocationServiceEnabled();
-    var permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-    if (!enabled ||
-        permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
+    final permission = await LocationPermissionHelper.request();
+    if (!permission.isGranted) {
       if (!mounted) return;
-      setState(() => _trackingMessage =
-          'Location permission is required for live tracking.');
+      setState(() => _trackingMessage = permission.message);
       return;
     }
 
@@ -348,11 +355,11 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
       markers: markers,
       mapController: _mapController,
       onUserMove: () => _mapMovedByUser = true,
+      fallbackCenter: _fallbackMapCenter,
       onMyLocation: () async {
         if (!_mapController.isCompleted) return;
         final c = await _mapController.future;
-        final fallback =
-            gmap.LatLng(ride.origin.latitude, ride.origin.longitude);
+        final fallback = _validRideOriginOrFallback(ride);
         await c.animateCamera(
             gmap.CameraUpdate.newLatLngZoom(_driverLivePoint ?? fallback, 14));
       },
@@ -441,9 +448,8 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                                   onPressed: () async {
                                     if (!_mapController.isCompleted) return;
                                     final c = await _mapController.future;
-                                    final fallback = gmap.LatLng(
-                                        ride.origin.latitude,
-                                        ride.origin.longitude);
+                                    final fallback =
+                                        _validRideOriginOrFallback(ride);
                                     await c.animateCamera(
                                         gmap.CameraUpdate.newLatLngZoom(
                                             _driverLivePoint ?? fallback, 14));
@@ -538,8 +544,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                           : () async {
                               if (!_mapController.isCompleted) return;
                               final c = await _mapController.future;
-                              final fallback = gmap.LatLng(
-                                  ride.origin.latitude, ride.origin.longitude);
+                              final fallback = _validRideOriginOrFallback(ride);
                               await c.animateCamera(
                                   gmap.CameraUpdate.newLatLngZoom(
                                       _driverLivePoint ?? fallback, 14));
@@ -600,6 +605,11 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     };
   }
 
+  gmap.LatLng _validRideOriginOrFallback(RideOffer ride) =>
+      _isValidCoordinate(ride.origin.latitude, ride.origin.longitude)
+          ? gmap.LatLng(ride.origin.latitude, ride.origin.longitude)
+          : _fallbackMapCenter;
+
   double _driverDistanceKm(RideBooking? booking) {
     if (_driverLivePoint == null || booking?.passengerPickup == null)
       return 2.4;
@@ -635,6 +645,7 @@ class _MapCard extends StatelessWidget {
     required this.markers,
     required this.mapController,
     required this.onUserMove,
+    required this.fallbackCenter,
     required this.onMyLocation,
   });
 
@@ -647,12 +658,21 @@ class _MapCard extends StatelessWidget {
   final Set<gmap.Marker> markers;
   final Completer<gmap.GoogleMapController> mapController;
   final VoidCallback onUserMove;
+  final gmap.LatLng fallbackCenter;
   final VoidCallback onMyLocation;
 
   @override
   Widget build(BuildContext context) {
+    final originIsValid = ride.origin.latitude.isFinite &&
+        ride.origin.longitude.isFinite &&
+        ride.origin.latitude >= -90 &&
+        ride.origin.latitude <= 90 &&
+        ride.origin.longitude >= -180 &&
+        ride.origin.longitude <= 180;
     final center = driverLivePoint ??
-        gmap.LatLng(ride.origin.latitude, ride.origin.longitude);
+        (originIsValid
+            ? gmap.LatLng(ride.origin.latitude, ride.origin.longitude)
+            : fallbackCenter);
     return Card(
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),

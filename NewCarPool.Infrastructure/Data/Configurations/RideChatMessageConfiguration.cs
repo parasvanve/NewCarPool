@@ -11,6 +11,10 @@ public sealed class RideChatMessageConfiguration : IEntityTypeConfiguration<Ride
         builder.ToTable("RideChatMessages");
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Message).HasMaxLength(2000).IsRequired();
+        builder.Property(x => x.MessageType).IsRequired();
+        builder.Property(x => x.AttachmentUrl).HasMaxLength(1000);
+        builder.Property(x => x.AttachmentFileName).HasMaxLength(255);
+        builder.Property(x => x.AttachmentContentType).HasMaxLength(100);
         builder.HasIndex(x => new { x.RideChatGroupId, x.CreatedAtUtc });
         builder.HasOne(x => x.RideChatGroup)
             .WithMany(x => x.Messages)

@@ -1,13 +1,13 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gmap;
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/errors/app_exception.dart';
+import '../../core/utils/location_permission_helper.dart';
 import '../../core/utils/location_display_formatter.dart';
 import '../../core/widgets/app_design_system.dart';
 import '../../models/ride_models.dart';
@@ -35,7 +35,10 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
   DateTime _selectedDate = DateTime.now();
   int _seatsCount = 1;
 
-  LatLng _centerLocation = const LatLng(12.9716, 77.5946);
+  LatLng _centerLocation = const LatLng(
+    LocationPermissionHelper.indoreLatitude,
+    LocationPermissionHelper.indoreLongitude,
+  );
   LatLng? _pickupLatLng;
   LatLng? _dropLatLng;
 
@@ -45,6 +48,7 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
   bool _isLoadingRoute = false;
   bool _showSuggestions = false;
   bool _isMapReady = false;
+  bool _canShowMyLocation = false;
   bool _suppressSearchOnChanged = false;
 
   List<Map<String, dynamic>> _searchSuggestions = const [];
@@ -85,41 +89,39 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
     if (!mounted) return;
     setState(() => _isLoadingLocation = true);
     try {
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-
-      if (permission != LocationPermission.whileInUse &&
-          permission != LocationPermission.always) {
-        _showError('Location permission denied. Please enable GPS permission.');
-        return;
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings:
-            const LocationSettings(accuracy: LocationAccuracy.high),
-      );
+      final location = await LocationPermissionHelper.currentOrFallback();
 
       if (!mounted) return;
+      final point = LatLng(location.latitude, location.longitude);
+      setState(() {
+        _centerLocation = point;
+        _canShowMyLocation = location.hasPermission;
+      });
+      _moveMapSafely(point, 14.5);
+
+      if (location.message != null) {
+        _showError(location.message!);
+      }
+      if (location.isDefaultFallback) return;
+
       final reverse = await context.read<MapService>().reverseGeocode(
-            latitude: position.latitude,
-            longitude: position.longitude,
+            latitude: location.latitude,
+            longitude: location.longitude,
           );
       final pickupSuggestion = LocationDisplayFormatter.fromSearchSuggestion({
         'displayName': reverse,
         'formattedAddress': reverse,
-        'latitude': position.latitude,
-        'longitude': position.longitude,
+        'latitude': location.latitude,
+        'longitude': location.longitude,
       });
       setState(() {
-        _pickupLatLng = LatLng(position.latitude, position.longitude);
+        _pickupLatLng = point;
         _centerLocation = _pickupLatLng!;
         _pickupSelection = pickupSuggestion;
-        _pickupController.text = pickupSuggestion['formattedAddress'].toString();
+        _pickupController.text =
+            pickupSuggestion['formattedAddress'].toString();
       });
 
-      _moveMapSafely(_centerLocation, 14.5);
       await _loadRoutePreview();
     } catch (_) {
       _showError('Unable to fetch GPS location. Please retry.');
@@ -156,7 +158,11 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
     setState(() => _isSearching = true);
 
     try {
-      final results = await context.read<MapService>().geocode(query);
+      final results = await context.read<MapService>().geocode(
+            query,
+            latitude: _centerLocation.latitude,
+            longitude: _centerLocation.longitude,
+          );
       if (!mounted || requestId != _searchRequestId) return;
 
       final suggestions = results
@@ -188,7 +194,11 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
 
     setState(() => _isSearching = true);
     try {
-      final results = await context.read<MapService>().geocode(trimmed);
+      final results = await context.read<MapService>().geocode(
+            trimmed,
+            latitude: _centerLocation.latitude,
+            longitude: _centerLocation.longitude,
+          );
       if (!mounted) return;
       if (results.isEmpty) {
         _showError('No destination found for "$trimmed".');
@@ -260,9 +270,11 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
     await _loadRoutePreview();
   }
 
-  void _applySelectionToActiveField(LatLng point, Map<String, dynamic> suggestion) {
-    final formattedAddress =
-        suggestion['formattedAddress']?.toString() ?? suggestion['displayName']?.toString() ?? 'Pinned location';
+  void _applySelectionToActiveField(
+      LatLng point, Map<String, dynamic> suggestion) {
+    final formattedAddress = suggestion['formattedAddress']?.toString() ??
+        suggestion['displayName']?.toString() ??
+        'Pinned location';
     setState(() {
       if (_activeField == _SearchMapPickField.pickup) {
         _pickupLatLng = point;
@@ -344,7 +356,8 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
       setState(() {
         _distanceKm = null;
         _etaMinutes = null;
-        _routeWarning = 'Route preview unavailable right now. Please try again.';
+        _routeWarning =
+            'Route preview unavailable right now. Please try again.';
         _routePolylinePoints = const [];
       });
     } finally {
@@ -363,7 +376,8 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
       northeast: gmap.LatLng(lats.reduce(math.max), lngs.reduce(math.max)),
     );
     final controller = await _mapController.future;
-    await controller.animateCamera(gmap.CameraUpdate.newLatLngBounds(bounds, 52));
+    await controller
+        .animateCamera(gmap.CameraUpdate.newLatLngBounds(bounds, 52));
   }
 
   List<LatLng> _decodePolyline(String encoded) {
@@ -539,374 +553,394 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
                   child: ListView(
                     padding: const EdgeInsets.all(12),
                     children: [
-                  const AppGradientHeroCard(
-                    title: 'Search Ride',
-                    subtitle: 'Find your next ride with live route preview',
-                    icon: Icons.travel_explore,
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _pickupController,
-                    readOnly: true,
-                    onTap: () => setState(() => _activeField = _SearchMapPickField.pickup),
-                    decoration: InputDecoration(
-                      labelText: 'Pickup Location',
-                      prefixIcon:
-                          const Icon(Icons.my_location, color: Colors.green),
-                      suffixIcon: _isLoadingLocation
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: Padding(
-                                padding: EdgeInsets.all(12),
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                      const AppGradientHeroCard(
+                        title: 'Search Ride',
+                        subtitle: 'Find your next ride with live route preview',
+                        icon: Icons.travel_explore,
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: _pickupController,
+                        readOnly: true,
+                        onTap: () => setState(
+                            () => _activeField = _SearchMapPickField.pickup),
+                        decoration: InputDecoration(
+                          labelText: 'Pickup Location',
+                          prefixIcon: const Icon(Icons.my_location,
+                              color: Colors.green),
+                          suffixIcon: _isLoadingLocation
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: Padding(
+                                    padding: EdgeInsets.all(12),
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
+                                  ),
+                                )
+                              : Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (_pickupLatLng != null)
+                                      IconButton(
+                                        tooltip: 'Clear pickup',
+                                        icon: const Icon(Icons.close),
+                                        onPressed: _clearPickup,
+                                      ),
+                                    IconButton(
+                                      icon: const Icon(Icons.refresh),
+                                      onPressed: _determineCurrentLocation,
+                                    ),
+                                  ],
+                                ),
+                          border: const OutlineInputBorder(),
+                        ),
+                        validator: (_) => _pickupLatLng == null
+                            ? 'Pickup location required'
+                            : null,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _searchController,
+                              focusNode: _searchFocusNode,
+                              textInputAction: TextInputAction.search,
+                              decoration: InputDecoration(
+                                labelText:
+                                    _activeField == _SearchMapPickField.pickup
+                                        ? 'Search Pickup'
+                                        : 'Search Destination',
+                                hintText: 'Type area/city',
+                                prefixIcon: const Icon(Icons.search,
+                                    color: Colors.orange),
+                                suffixIcon: _isSearching
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: Padding(
+                                          padding: EdgeInsets.all(12),
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2),
+                                        ),
+                                      )
+                                    : null,
+                                border: const OutlineInputBorder(),
+                              ),
+                              onChanged: _onSearchChanged,
+                              onFieldSubmitted: _searchLocation,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filled(
+                            onPressed: _isSearching
+                                ? null
+                                : () => _searchLocation(_searchController.text),
+                            icon: const Icon(Icons.search),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      if (_showSuggestions)
+                        Container(
+                          constraints: const BoxConstraints(maxHeight: 220),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).cardColor,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: Theme.of(context).dividerColor),
+                          ),
+                          child: ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: _searchSuggestions.length,
+                            separatorBuilder: (_, __) =>
+                                const Divider(height: 1),
+                            itemBuilder: (context, index) {
+                              final suggestion = _searchSuggestions[index];
+                              return ListTile(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                leading: const Icon(Icons.place_outlined),
+                                title: Text(
+                                  LocationDisplayFormatter.title(suggestion),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                subtitle: Text(
+                                  LocationDisplayFormatter.subtitleWithDistance(
+                                      suggestion),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                onTap: () => _selectSuggestion(suggestion),
+                              );
+                            },
+                          ),
+                        ),
+                      if (_showSuggestions) const SizedBox(height: 8),
+                      if (_recentSearches.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Recent searches',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: _recentSearches
+                              .map(
+                                (s) => ActionChip(
+                                  avatar: const Icon(Icons.history, size: 16),
+                                  label:
+                                      Text(s, overflow: TextOverflow.ellipsis),
+                                  onPressed: () => _searchLocation(s),
+                                ),
+                              )
+                              .toList(),
+                        ),
+                        const SizedBox(height: 8),
+                      ],
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Saved places',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _savedLocations
+                            .map(
+                              (label) => ActionChip(
+                                avatar:
+                                    const Icon(Icons.bookmark_border, size: 16),
+                                label: Text(label),
+                                onPressed: () {
+                                  if (label == 'Airport') {
+                                    _searchLocation('Airport');
+                                  } else if (label == 'Home') {
+                                    _searchLocation('Home');
+                                  } else {
+                                    _searchLocation('Work');
+                                  }
+                                },
                               ),
                             )
-                          : Row(
-                              mainAxisSize: MainAxisSize.min,
+                            .toList(),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: _destinationController,
+                        readOnly: true,
+                        onTap: () => setState(() =>
+                            _activeField = _SearchMapPickField.destination),
+                        decoration: InputDecoration(
+                          labelText: 'Destination',
+                          hintText: 'Tap map or use search',
+                          prefixIcon:
+                              const Icon(Icons.location_on, color: Colors.red),
+                          suffixIcon: _dropLatLng == null
+                              ? null
+                              : IconButton(
+                                  tooltip: 'Clear destination',
+                                  icon: const Icon(Icons.close),
+                                  onPressed: _clearDestination,
+                                ),
+                          border: const OutlineInputBorder(),
+                        ),
+                        validator: (_) =>
+                            _dropLatLng == null ? 'Destination required' : null,
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          ChoiceChip(
+                            label: const Text('Pickup'),
+                            selected:
+                                _activeField == _SearchMapPickField.pickup,
+                            onSelected: (_) => setState(() =>
+                                _activeField = _SearchMapPickField.pickup),
+                          ),
+                          ChoiceChip(
+                            label: const Text('Destination'),
+                            selected:
+                                _activeField == _SearchMapPickField.destination,
+                            onSelected: (_) => setState(() =>
+                                _activeField = _SearchMapPickField.destination),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ListTile(
+                              contentPadding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              title: Text(
+                                'Date: ${_selectedDate.toLocal().toString().split(' ').first}',
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                              trailing:
+                                  const Icon(Icons.calendar_today, size: 20),
+                              shape: RoundedRectangleBorder(
+                                side: BorderSide(
+                                    color:
+                                        Theme.of(context).colorScheme.outline),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              onTap: () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: _selectedDate,
+                                  firstDate: DateTime.now(),
+                                  lastDate: DateTime.now()
+                                      .add(const Duration(days: 30)),
+                                );
+                                if (picked != null) {
+                                  setState(() => _selectedDate = picked);
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                  color: Theme.of(context).colorScheme.outline),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
                               children: [
-                                if (_pickupLatLng != null)
-                                  IconButton(
-                                    tooltip: 'Clear pickup',
-                                    icon: const Icon(Icons.close),
-                                    onPressed: _clearPickup,
-                                  ),
                                 IconButton(
-                                  icon: const Icon(Icons.refresh),
-                                  onPressed: _determineCurrentLocation,
+                                  onPressed: _seatsCount > 1
+                                      ? () => setState(() => _seatsCount--)
+                                      : null,
+                                  icon: const Icon(Icons.remove_circle_outline,
+                                      size: 20),
+                                ),
+                                Text(
+                                  '$_seatsCount',
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                                IconButton(
+                                  onPressed: _seatsCount < 6
+                                      ? () => setState(() => _seatsCount++)
+                                      : null,
+                                  icon: const Icon(Icons.add_circle_outline,
+                                      size: 20),
                                 ),
                               ],
                             ),
-                      border: const OutlineInputBorder(),
-                    ),
-                    validator: (_) => _pickupLatLng == null
-                        ? 'Pickup location required'
-                        : null,
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          controller: _searchController,
-                          focusNode: _searchFocusNode,
-                          textInputAction: TextInputAction.search,
-                          decoration: InputDecoration(
-                            labelText: _activeField == _SearchMapPickField.pickup ? 'Search Pickup' : 'Search Destination',
-                            hintText: 'Type area/city',
-                            prefixIcon:
-                                const Icon(Icons.search, color: Colors.orange),
-                            suffixIcon: _isSearching
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: Padding(
-                                      padding: EdgeInsets.all(12),
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2),
-                                    ),
-                                  )
-                                : null,
-                            border: const OutlineInputBorder(),
                           ),
-                          onChanged: _onSearchChanged,
-                          onFieldSubmitted: _searchLocation,
-                        ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      IconButton.filled(
-                        onPressed: _isSearching
-                            ? null
-                            : () => _searchLocation(_searchController.text),
-                        icon: const Icon(Icons.search),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (_showSuggestions)
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 220),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(8),
-                        border:
-                            Border.all(color: Theme.of(context).dividerColor),
-                      ),
-                      child: ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: _searchSuggestions.length,
-                        separatorBuilder: (_, __) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final suggestion = _searchSuggestions[index];
-                          return ListTile(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            leading: const Icon(Icons.place_outlined),
+                      const SizedBox(height: 10),
+                      if (_isLoadingRoute) const LinearProgressIndicator(),
+                      if (_distanceKm != null && _etaMinutes != null)
+                        Card(
+                          child: ListTile(
+                            leading: const Icon(Icons.route),
                             title: Text(
-                              LocationDisplayFormatter.title(suggestion),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              LocationDisplayFormatter.subtitle(suggestion),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            onTap: () => _selectSuggestion(suggestion),
-                          );
-                        },
-                      ),
-                    ),
-                  if (_showSuggestions) const SizedBox(height: 8),
-                  if (_recentSearches.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Text(
-                        'Recent searches',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: _recentSearches
-                          .map(
-                            (s) => ActionChip(
-                              avatar: const Icon(Icons.history, size: 16),
-                              label: Text(s, overflow: TextOverflow.ellipsis),
-                              onPressed: () => _searchLocation(s),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Saved places',
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: _savedLocations
-                        .map(
-                          (label) => ActionChip(
-                            avatar: const Icon(Icons.bookmark_border, size: 16),
-                            label: Text(label),
-                            onPressed: () {
-                              if (label == 'Airport') {
-                                _searchLocation('Airport');
-                              } else if (label == 'Home') {
-                                _searchLocation('Home');
-                              } else {
-                                _searchLocation('Work');
-                              }
-                            },
+                                'Distance: ${_distanceKm!.toStringAsFixed(1)} km'),
+                            subtitle: Text('ETA: $_etaMinutes min'),
                           ),
-                        )
-                        .toList(),
-                  ),
-                  const SizedBox(height: 8),
-                  TextFormField(
-                    controller: _destinationController,
-                    readOnly: true,
-                    onTap: () => setState(() => _activeField = _SearchMapPickField.destination),
-                    decoration: InputDecoration(
-                      labelText: 'Destination',
-                      hintText: 'Tap map or use search',
-                      prefixIcon: const Icon(Icons.location_on, color: Colors.red),
-                      suffixIcon: _dropLatLng == null
-                          ? null
-                          : IconButton(
-                              tooltip: 'Clear destination',
-                              icon: const Icon(Icons.close),
-                              onPressed: _clearDestination,
-                            ),
-                      border: const OutlineInputBorder(),
-                    ),
-                    validator: (_) =>
-                        _dropLatLng == null ? 'Destination required' : null,
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      ChoiceChip(
-                        label: const Text('Pickup'),
-                        selected: _activeField == _SearchMapPickField.pickup,
-                        onSelected: (_) => setState(() => _activeField = _SearchMapPickField.pickup),
-                      ),
-                      ChoiceChip(
-                        label: const Text('Destination'),
-                        selected: _activeField == _SearchMapPickField.destination,
-                        onSelected: (_) => setState(() => _activeField = _SearchMapPickField.destination),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ListTile(
-                          contentPadding:
-                              const EdgeInsets.symmetric(horizontal: 8),
-                          title: Text(
-                            'Date: ${_selectedDate.toLocal().toString().split(' ').first}',
-                            style: const TextStyle(fontSize: 14),
+                        ),
+                      if (_routeWarning != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                            _routeWarning!,
+                            style: const TextStyle(color: Colors.orange),
                           ),
-                          trailing: const Icon(Icons.calendar_today, size: 20),
-                          shape: RoundedRectangleBorder(
-                            side: BorderSide(
-                                color: Theme.of(context).colorScheme.outline),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          onTap: () async {
-                            final picked = await showDatePicker(
-                              context: context,
-                              initialDate: _selectedDate,
-                              firstDate: DateTime.now(),
-                              lastDate:
-                                  DateTime.now().add(const Duration(days: 30)),
-                            );
-                            if (picked != null) {
-                              setState(() => _selectedDate = picked);
-                            }
-                          },
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                              color: Theme.of(context).colorScheme.outline),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              onPressed: _seatsCount > 1
-                                  ? () => setState(() => _seatsCount--)
-                                  : null,
-                              icon: const Icon(Icons.remove_circle_outline,
-                                  size: 20),
-                            ),
-                            Text(
-                              '$_seatsCount',
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                            IconButton(
-                              onPressed: _seatsCount < 6
-                                  ? () => setState(() => _seatsCount++)
-                                  : null,
-                              icon: const Icon(Icons.add_circle_outline,
-                                  size: 20),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  if (_isLoadingRoute) const LinearProgressIndicator(),
-                  if (_distanceKm != null && _etaMinutes != null)
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.route),
-                        title: Text(
-                            'Distance: ${_distanceKm!.toStringAsFixed(1)} km'),
-                        subtitle: Text('ETA: $_etaMinutes min'),
-                      ),
-                    ),
-                  if (_routeWarning != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Text(
-                        _routeWarning!,
-                        style: const TextStyle(color: Colors.orange),
-                      ),
-                    ),
-                  SizedBox(
-                    height: 280,
-                    child: RepaintBoundary(
-                      child: Stack(
-                        children: [
-                          Material(
-                            elevation: 4,
-                            borderRadius: BorderRadius.circular(18),
-                            clipBehavior: Clip.antiAlias,
-                            child: gmap.GoogleMap(
-                              initialCameraPosition: gmap.CameraPosition(
-                                target: gmap.LatLng(
-                                  _centerLocation.latitude,
-                                  _centerLocation.longitude,
-                                ),
-                                zoom: 13,
-                              ),
-                              onMapCreated: (controller) {
-                                if (!_mapController.isCompleted) {
-                                  _mapController.complete(controller);
-                                }
-                                _isMapReady = true;
-                                final pending = _pendingMapCenter;
-                                if (pending != null) {
-                                  controller.animateCamera(
-                                    gmap.CameraUpdate.newLatLngZoom(
-                                      gmap.LatLng(
-                                        pending.latitude,
-                                        pending.longitude,
+                      SizedBox(
+                        height: 280,
+                        child: RepaintBoundary(
+                          child: Stack(
+                            children: [
+                              Material(
+                                elevation: 4,
+                                borderRadius: BorderRadius.circular(18),
+                                clipBehavior: Clip.antiAlias,
+                                child: gmap.GoogleMap(
+                                  initialCameraPosition: gmap.CameraPosition(
+                                    target: gmap.LatLng(
+                                      _centerLocation.latitude,
+                                      _centerLocation.longitude,
+                                    ),
+                                    zoom: 13,
+                                  ),
+                                  onMapCreated: (controller) {
+                                    if (!_mapController.isCompleted) {
+                                      _mapController.complete(controller);
+                                    }
+                                    _isMapReady = true;
+                                    final pending = _pendingMapCenter;
+                                    if (pending != null) {
+                                      controller.animateCamera(
+                                        gmap.CameraUpdate.newLatLngZoom(
+                                          gmap.LatLng(
+                                            pending.latitude,
+                                            pending.longitude,
+                                          ),
+                                          _pendingMapZoom,
+                                        ),
+                                      );
+                                      _pendingMapCenter = null;
+                                    }
+                                  },
+                                  myLocationEnabled: _canShowMyLocation,
+                                  myLocationButtonEnabled: false,
+                                  zoomControlsEnabled: false,
+                                  compassEnabled: true,
+                                  mapToolbarEnabled: false,
+                                  onCameraMove: (position) =>
+                                      _mapZoom = position.zoom,
+                                  minMaxZoomPreference:
+                                      const gmap.MinMaxZoomPreference(4, 18),
+                                  onTap: (point) => _setPointFromMap(
+                                    LatLng(point.latitude, point.longitude),
+                                  ),
+                                  markers: {
+                                    if (_pickupLatLng != null)
+                                      gmap.Marker(
+                                        markerId: const gmap.MarkerId('pickup'),
+                                        position: gmap.LatLng(
+                                          _pickupLatLng!.latitude,
+                                          _pickupLatLng!.longitude,
+                                        ),
+                                        icon: gmap.BitmapDescriptor
+                                            .defaultMarkerWithHue(
+                                          gmap.BitmapDescriptor.hueGreen,
+                                        ),
                                       ),
-                                      _pendingMapZoom,
-                                    ),
-                                  );
-                                  _pendingMapCenter = null;
-                                }
-                              },
-                              myLocationEnabled: true,
-                              myLocationButtonEnabled: false,
-                              zoomControlsEnabled: false,
-                              compassEnabled: true,
-                              mapToolbarEnabled: false,
-                              onCameraMove: (position) => _mapZoom = position.zoom,
-                              minMaxZoomPreference:
-                                  const gmap.MinMaxZoomPreference(4, 18),
-                              onTap: (point) => _setPointFromMap(
-                                LatLng(point.latitude, point.longitude),
-                              ),
-                              markers: {
-                                if (_pickupLatLng != null)
-                                  gmap.Marker(
-                                    markerId: const gmap.MarkerId('pickup'),
-                                    position: gmap.LatLng(
-                                      _pickupLatLng!.latitude,
-                                      _pickupLatLng!.longitude,
-                                    ),
-                                    icon: gmap.BitmapDescriptor.defaultMarkerWithHue(
-                                      gmap.BitmapDescriptor.hueGreen,
-                                    ),
-                                  ),
-                                if (_dropLatLng != null)
-                                  gmap.Marker(
-                                    markerId: const gmap.MarkerId('drop'),
-                                    position: gmap.LatLng(
-                                      _dropLatLng!.latitude,
-                                      _dropLatLng!.longitude,
-                                    ),
-                                    icon: gmap.BitmapDescriptor.defaultMarkerWithHue(
-                                      gmap.BitmapDescriptor.hueRed,
-                                    ),
-                                  ),
-                                ...nearbyRides.map(
+                                    if (_dropLatLng != null)
+                                      gmap.Marker(
+                                        markerId: const gmap.MarkerId('drop'),
+                                        position: gmap.LatLng(
+                                          _dropLatLng!.latitude,
+                                          _dropLatLng!.longitude,
+                                        ),
+                                        icon: gmap.BitmapDescriptor
+                                            .defaultMarkerWithHue(
+                                          gmap.BitmapDescriptor.hueRed,
+                                        ),
+                                      ),
+                                    ...nearbyRides.map(
                                       (ride) => gmap.Marker(
                                         markerId:
                                             gmap.MarkerId('ride-${ride.id}'),
@@ -922,51 +956,56 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
                                           title: ride.driverName.isEmpty
                                               ? 'Ride'
                                               : ride.driverName,
-                                          snippet: '\u20B9${ride.pricePerSeat} • ${ride.availableSeats} seats',
+                                          snippet:
+                                              '\u20B9${ride.pricePerSeat} • ${ride.availableSeats} seats',
                                         ),
                                       ),
                                     ),
-                              },
-                              polylines: {
-                                if (_routePolylinePoints.length >= 2)
-                                  gmap.Polyline(
-                                    polylineId:
-                                        const gmap.PolylineId('search_route'),
-                                    points: _routePolylinePoints
-                                        .map((p) => gmap.LatLng(
-                                            p.latitude, p.longitude))
-                                        .toList(),
-                                    width: 5,
-                                    color: AppDesignTokens.brandStart,
-                                    geodesic: true,
-                                    startCap: gmap.Cap.roundCap,
-                                    endCap: gmap.Cap.roundCap,
+                                  },
+                                  polylines: {
+                                    if (_routePolylinePoints.length >= 2)
+                                      gmap.Polyline(
+                                        polylineId: const gmap.PolylineId(
+                                            'search_route'),
+                                        points: _routePolylinePoints
+                                            .map((p) => gmap.LatLng(
+                                                p.latitude, p.longitude))
+                                            .toList(),
+                                        width: 5,
+                                        color: AppDesignTokens.brandStart,
+                                        geodesic: true,
+                                        startCap: gmap.Cap.roundCap,
+                                        endCap: gmap.Cap.roundCap,
+                                      ),
+                                  },
+                                ),
+                              ),
+                              Positioned(
+                                bottom: 12,
+                                right: 12,
+                                child: AppMapControls(
+                                  onZoomIn: () => _moveMapSafely(
+                                    _dropLatLng ??
+                                        _pickupLatLng ??
+                                        _centerLocation,
+                                    (_mapZoom + 1).clamp(4, 18).toDouble(),
                                   ),
-                              },
-                            ),
+                                  onZoomOut: () => _moveMapSafely(
+                                    _dropLatLng ??
+                                        _pickupLatLng ??
+                                        _centerLocation,
+                                    (_mapZoom - 1).clamp(4, 18).toDouble(),
+                                  ),
+                                  onRecenter: () => _moveMapSafely(
+                                    _pickupLatLng ?? _centerLocation,
+                                    15,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                          Positioned(
-                            bottom: 12,
-                            right: 12,
-                            child: AppMapControls(
-                              onZoomIn: () => _moveMapSafely(
-                                _dropLatLng ?? _pickupLatLng ?? _centerLocation,
-                                (_mapZoom + 1).clamp(4, 18).toDouble(),
-                              ),
-                              onZoomOut: () => _moveMapSafely(
-                                _dropLatLng ?? _pickupLatLng ?? _centerLocation,
-                                (_mapZoom - 1).clamp(4, 18).toDouble(),
-                              ),
-                              onRecenter: () => _moveMapSafely(
-                                _pickupLatLng ?? _centerLocation,
-                                15,
-                              ),
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
                     ],
                   ),
                 ),
@@ -1002,7 +1041,3 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
     );
   }
 }
-
-
-
-

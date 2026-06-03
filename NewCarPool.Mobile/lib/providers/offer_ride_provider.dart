@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../core/utils/location_permission_helper.dart';
 import '../models/ride_models.dart';
 import '../services/map_service.dart';
 
@@ -19,6 +19,7 @@ class OfferRideProvider extends ChangeNotifier {
   int? etaMinutes;
   bool isLoadingLocation = false;
   bool isRouteLoading = false;
+  bool canShowMyLocation = false;
   String? routeError;
   String? routeWarning;
 
@@ -26,29 +27,23 @@ class OfferRideProvider extends ChangeNotifier {
     isLoadingLocation = true;
     notifyListeners();
     try {
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission != LocationPermission.whileInUse &&
-          permission != LocationPermission.always) {
-        routeError = 'Location permission denied. Please enable GPS permission.';
+      final location = await LocationPermissionHelper.currentOrFallback();
+      canShowMyLocation = location.hasPermission;
+      if (location.isDefaultFallback) {
+        routeError = location.message;
         return;
       }
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings:
-            const LocationSettings(accuracy: LocationAccuracy.high),
-      );
-      pickup = LatLng(position.latitude, position.longitude);
+
+      pickup = LatLng(location.latitude, location.longitude);
       try {
         pickupAddress = await _mapService.reverseGeocode(
-          latitude: position.latitude,
-          longitude: position.longitude,
+          latitude: location.latitude,
+          longitude: location.longitude,
         );
       } catch (_) {
         pickupAddress = 'Current location';
       }
-      routeError = null;
+      routeError = location.message;
     } catch (_) {
       routeError = 'Unable to fetch GPS location. Please retry.';
     } finally {
@@ -136,7 +131,6 @@ class OfferRideProvider extends ChangeNotifier {
     return (a.latitude - b.latitude).abs() < 0.0001 &&
         (a.longitude - b.longitude).abs() < 0.0001;
   }
-
 }
 
 extension on RideStop {

@@ -227,16 +227,20 @@ class _TripsScreenState extends State<TripsScreen> {
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
-                child: Row(
-                  children: [
-                    _TripFilterChip(label: 'Upcoming', selected: _tab == 0, onTap: () => setState(() => _tab = 0)),
-                    const SizedBox(width: 8),
-                    _TripFilterChip(label: 'Booked', selected: _tab == 1, onTap: () => setState(() => _tab = 1)),
-                    const SizedBox(width: 8),
-                    _TripFilterChip(label: 'Completed', selected: _tab == 2, onTap: () => setState(() => _tab = 2)),
-                    const SizedBox(width: 8),
-                    _TripFilterChip(label: 'Cancelled', selected: _tab == 3, onTap: () => setState(() => _tab = 3)),
-                  ],
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _TripFilterChip(label: 'Upcoming', selected: _tab == 0, onTap: () => setState(() => _tab = 0)),
+                      const SizedBox(width: 8),
+                      _TripFilterChip(label: 'Booked', selected: _tab == 1, onTap: () => setState(() => _tab = 1)),
+                      const SizedBox(width: 8),
+                      _TripFilterChip(label: 'Completed', selected: _tab == 2, onTap: () => setState(() => _tab = 2)),
+                      const SizedBox(width: 8),
+                      _TripFilterChip(label: 'Cancelled', selected: _tab == 3, onTap: () => setState(() => _tab = 3)),
+                    ],
+                  ),
                 ),
               ),
               Expanded(

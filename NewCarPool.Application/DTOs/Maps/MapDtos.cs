@@ -10,7 +10,8 @@ public sealed record GeocodeResultDto(
     string? Address = null,
     long? PlaceId = null,
     string? MainText = null,
-    string? SecondaryText = null);
+    string? SecondaryText = null,
+    double? DistanceKm = null);
 public sealed record ReverseGeocodeResultDto(
     string DisplayName,
     double Latitude,

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -58,6 +58,9 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
       final route = context.read<OfferRideProvider>();
       await route.detectCurrentLocation();
       if (!mounted) return;
+      if (route.routeError != null) {
+        _showInlineWarning(route.routeError!);
+      }
       if (route.pickup != null) {
         _center = route.pickup!;
         _pickupCtrl.text = route.pickupAddress;
@@ -85,7 +88,8 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
   void _moveMap(LatLng p, double z) {
     if (!_isMapReady) return;
     _mapCtrl.future.then((c) {
-      c.animateCamera(gmap.CameraUpdate.newLatLngZoom(gmap.LatLng(p.latitude, p.longitude), z));
+      c.animateCamera(gmap.CameraUpdate.newLatLngZoom(
+          gmap.LatLng(p.latitude, p.longitude), z));
     });
   }
 
@@ -121,7 +125,13 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                 error = null;
               });
               try {
-                final results = await context.read<MapService>().geocode(q);
+                final bias =
+                    context.read<OfferRideProvider>().pickup ?? _center;
+                final results = await context.read<MapService>().geocode(
+                      q,
+                      latitude: bias.latitude,
+                      longitude: bias.longitude,
+                    );
                 final mapped = results
                     .take(8)
                     .map((e) => LocationDisplayFormatter.fromSearchSuggestion(
@@ -141,24 +151,32 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
             }
 
             return Padding(
-              padding: EdgeInsets.fromLTRB(16, 14, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+              padding: EdgeInsets.fromLTRB(
+                  16, 14, 16, MediaQuery.of(context).viewInsets.bottom + 16),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Row(
                     children: [
                       Expanded(
-                        child: Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                        child: Text(title,
+                            style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.w700)),
                       ),
-                      IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                      IconButton(
+                          onPressed: () => Navigator.pop(context),
+                          icon: const Icon(Icons.close)),
                     ],
                   ),
                   TextField(
                     controller: searchCtrl,
-                    decoration: const InputDecoration(labelText: 'Search location', prefixIcon: Icon(Icons.search)),
+                    decoration: const InputDecoration(
+                        labelText: 'Search location',
+                        prefixIcon: Icon(Icons.search)),
                     onChanged: (v) {
                       _searchDebounce?.cancel();
-                      _searchDebounce = Timer(const Duration(milliseconds: 450), () => doSearch(v));
+                      _searchDebounce = Timer(
+                          const Duration(milliseconds: 450), () => doSearch(v));
                     },
                   ),
                   const SizedBox(height: 8),
@@ -184,7 +202,8 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                   if (error != null)
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Text(error!, style: const TextStyle(color: Colors.red)),
+                      child: Text(error!,
+                          style: const TextStyle(color: Colors.red)),
                     ),
                   if (localSuggestions.isNotEmpty)
                     SizedBox(
@@ -204,7 +223,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
-                              LocationDisplayFormatter.subtitle(s),
+                              LocationDisplayFormatter.subtitleWithDistance(s),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -223,9 +242,11 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
   }
 
   Future<void> _pickPickup() async {
-    final selected = await _openLocationPicker(title: 'Select Pickup Location', allowCurrentLocation: true);
+    final selected = await _openLocationPicker(
+        title: 'Select Pickup Location', allowCurrentLocation: true);
     if (selected == null) return;
-    final point = LatLng((selected['latitude'] as num).toDouble(), (selected['longitude'] as num).toDouble());
+    final point = LatLng((selected['latitude'] as num).toDouble(),
+        (selected['longitude'] as num).toDouble());
     final route = context.read<OfferRideProvider>();
     await route.setPickup(point);
     _pickupSelection = selected;
@@ -236,9 +257,11 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
   }
 
   Future<void> _pickDestination() async {
-    final selected = await _openLocationPicker(title: 'Select Final Destination', allowCurrentLocation: false);
+    final selected = await _openLocationPicker(
+        title: 'Select Final Destination', allowCurrentLocation: false);
     if (selected == null) return;
-    final point = LatLng((selected['latitude'] as num).toDouble(), (selected['longitude'] as num).toDouble());
+    final point = LatLng((selected['latitude'] as num).toDouble(),
+        (selected['longitude'] as num).toDouble());
     final route = context.read<OfferRideProvider>();
     await route.setDestination(point);
     _destinationSelection = selected;
@@ -249,14 +272,24 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
   }
 
   Future<void> _pickStop({int? index}) async {
-    final selected = await _openLocationPicker(title: index == null ? 'Add Drop Point' : 'Edit Drop Point', allowCurrentLocation: false);
+    final selected = await _openLocationPicker(
+        title: index == null ? 'Add Drop Point' : 'Edit Drop Point',
+        allowCurrentLocation: false);
     if (selected == null) return;
     final route = context.read<OfferRideProvider>();
-    final point = LatLng((selected['latitude'] as num).toDouble(), (selected['longitude'] as num).toDouble());
+    final point = LatLng((selected['latitude'] as num).toDouble(),
+        (selected['longitude'] as num).toDouble());
     final name = LocationDisplayFormatter.title(selected);
     final address = selected['formattedAddress']?.toString() ?? name;
-    final stop = RideStop(name: name, address: address, latitude: point.latitude, longitude: point.longitude, order: (index ?? route.stops.length) + 1);
-    final message = index == null ? await route.addStop(stop) : await route.updateStop(index, stop);
+    final stop = RideStop(
+        name: name,
+        address: address,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        order: (index ?? route.stops.length) + 1);
+    final message = index == null
+        ? await route.addStop(stop)
+        : await route.updateStop(index, stop);
     if (message != null) _showInlineWarning(message);
     if (message == null && mounted) {
       setState(() => _mapPickMode = _OfferMapPickMode.stop);
@@ -267,14 +300,16 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
     final route = context.read<OfferRideProvider>();
     switch (_mapPickMode) {
       case _OfferMapPickMode.pickup:
-        if (route.destination != null && _isSamePoint(point, route.destination!)) {
+        if (route.destination != null &&
+            _isSamePoint(point, route.destination!)) {
           _showInlineWarning('Pickup and destination cannot be same.');
           return;
         }
         await route.setPickup(point);
         final suggestion = await _reverseSuggestion(point);
         _pickupSelection = suggestion;
-        _pickupCtrl.text = suggestion['formattedAddress']?.toString() ?? route.pickupAddress;
+        _pickupCtrl.text =
+            suggestion['formattedAddress']?.toString() ?? route.pickupAddress;
         break;
       case _OfferMapPickMode.destination:
         if (route.pickup != null && _isSamePoint(point, route.pickup!)) {
@@ -284,13 +319,15 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
         await route.setDestination(point);
         final suggestion = await _reverseSuggestion(point);
         _destinationSelection = suggestion;
-        _destCtrl.text = suggestion['formattedAddress']?.toString() ?? 'Destination';
+        _destCtrl.text =
+            suggestion['formattedAddress']?.toString() ?? 'Destination';
         _destinationAddress = _destCtrl.text;
         break;
       case _OfferMapPickMode.stop:
         final suggestion = await _reverseSuggestion(point);
         final stopName = LocationDisplayFormatter.title(suggestion);
-        final stopAddress = suggestion['formattedAddress']?.toString() ?? stopName;
+        final stopAddress =
+            suggestion['formattedAddress']?.toString() ?? stopName;
         final stop = RideStop(
           name: stopName,
           address: stopAddress,
@@ -326,24 +363,32 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
   }
 
   bool _isSamePoint(LatLng a, LatLng b) {
-    return (a.latitude - b.latitude).abs() < 0.0001 && (a.longitude - b.longitude).abs() < 0.0001;
+    return (a.latitude - b.latitude).abs() < 0.0001 &&
+        (a.longitude - b.longitude).abs() < 0.0001;
   }
 
   Future<void> _openStopsSheet() async {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (_) {
         return Consumer<OfferRideProvider>(
           builder: (context, route, __) => Padding(
-            padding: EdgeInsets.fromLTRB(16, 14, 16, MediaQuery.of(context).viewInsets.bottom + 14),
+            padding: EdgeInsets.fromLTRB(
+                16, 14, 16, MediaQuery.of(context).viewInsets.bottom + 14),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Row(children: [
-                  const Expanded(child: Text('Manage Drop Points', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18))),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.close)),
+                  const Expanded(
+                      child: Text('Manage Drop Points',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 18))),
+                  IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close)),
                 ]),
                 TextButton.icon(
                   onPressed: (route.pickup == null || route.destination == null)
@@ -359,19 +404,27 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: route.stops.length,
-                  onReorder: (oldI, newI) async => route.reorderStops(oldI, newI),
+                  onReorder: (oldI, newI) async =>
+                      route.reorderStops(oldI, newI),
                   itemBuilder: (_, i) {
                     final stop = route.stops[i];
                     return ListTile(
-                      key: ValueKey('stop-$i-${stop.latitude}-${stop.longitude}'),
-                      leading: CircleAvatar(radius: 12, child: Text('${i + 1}', style: const TextStyle(fontSize: 12))),
+                      key: ValueKey(
+                          'stop-$i-${stop.latitude}-${stop.longitude}'),
+                      leading: CircleAvatar(
+                          radius: 12,
+                          child: Text('${i + 1}',
+                              style: const TextStyle(fontSize: 12))),
                       title: Text(stop.name),
-                      subtitle: Text('${stop.latitude.toStringAsFixed(4)}, ${stop.longitude.toStringAsFixed(4)}'),
+                      subtitle: Text(
+                          '${stop.latitude.toStringAsFixed(4)}, ${stop.longitude.toStringAsFixed(4)}'),
                       onTap: () async {
                         Navigator.pop(context);
                         await _pickStop(index: i);
                       },
-                      trailing: IconButton(onPressed: () => route.removeStop(i), icon: const Icon(Icons.delete_outline)),
+                      trailing: IconButton(
+                          onPressed: () => route.removeStop(i),
+                          icon: const Icon(Icons.delete_outline)),
                     );
                   },
                 ),
@@ -470,7 +523,8 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
   void _showInlineWarning(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), behavior: SnackBarBehavior.floating));
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating));
   }
 
   Widget _buildPanelContent(OfferRideProvider route, VehicleProvider vehicles) {
@@ -481,26 +535,39 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
         children: [
           Container(
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: const [BoxShadow(color: Color(0x15000000), blurRadius: 16, offset: Offset(0, 8))]),
+            decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: const [
+                  BoxShadow(
+                      color: Color(0x15000000),
+                      blurRadius: 16,
+                      offset: Offset(0, 8))
+                ]),
             child: Column(
               children: [
                 InkWell(
                   onTap: _pickPickup,
                   borderRadius: BorderRadius.circular(12),
                   child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'Pickup', prefixIcon: Icon(Icons.trip_origin, color: Colors.green)),
+                    decoration: const InputDecoration(
+                        labelText: 'Pickup',
+                        prefixIcon:
+                            Icon(Icons.trip_origin, color: Colors.green)),
                     child: _pickupCtrl.text.trim().isEmpty
                         ? const Text('Select pickup location')
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                LocationDisplayFormatter.title(_pickupSelection),
+                                LocationDisplayFormatter.title(
+                                    _pickupSelection),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                LocationDisplayFormatter.subtitle(_pickupSelection),
+                                LocationDisplayFormatter.subtitle(
+                                    _pickupSelection),
                                 style: Theme.of(context).textTheme.bodySmall,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -514,19 +581,23 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                   onTap: _pickDestination,
                   borderRadius: BorderRadius.circular(12),
                   child: InputDecorator(
-                    decoration: const InputDecoration(labelText: 'Final Destination', prefixIcon: Icon(Icons.location_on, color: Colors.red)),
+                    decoration: const InputDecoration(
+                        labelText: 'Final Destination',
+                        prefixIcon: Icon(Icons.location_on, color: Colors.red)),
                     child: _destCtrl.text.trim().isEmpty
                         ? const Text('Select final destination')
                         : Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                LocationDisplayFormatter.title(_destinationSelection),
+                                LocationDisplayFormatter.title(
+                                    _destinationSelection),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Text(
-                                LocationDisplayFormatter.subtitle(_destinationSelection),
+                                LocationDisplayFormatter.subtitle(
+                                    _destinationSelection),
                                 style: Theme.of(context).textTheme.bodySmall,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -541,37 +612,62 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18)),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            decoration: BoxDecoration(
+                color: Colors.white, borderRadius: BorderRadius.circular(18)),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(
                 children: [
-                  const Expanded(child: Text('Route Timeline', style: TextStyle(fontWeight: FontWeight.w700))),
-                  TextButton.icon(onPressed: _openStopsSheet, icon: const Icon(Icons.add), label: const Text('Stops')),
+                  const Expanded(
+                      child: Text('Route Timeline',
+                          style: TextStyle(fontWeight: FontWeight.w700))),
+                  TextButton.icon(
+                      onPressed: _openStopsSheet,
+                      icon: const Icon(Icons.add),
+                      label: const Text('Stops')),
                 ],
               ),
               RideTimeline(
-                pickup: _pickupCtrl.text.trim().isEmpty ? 'Pickup' : LocationDisplayFormatter.title(_pickupSelection),
+                pickup: _pickupCtrl.text.trim().isEmpty
+                    ? 'Pickup'
+                    : LocationDisplayFormatter.title(_pickupSelection),
                 stops: route.stops.map((s) => s.name).toList(),
-                destination: _destCtrl.text.trim().isEmpty ? 'Final destination' : LocationDisplayFormatter.title(_destinationSelection),
+                destination: _destCtrl.text.trim().isEmpty
+                    ? 'Final destination'
+                    : LocationDisplayFormatter.title(_destinationSelection),
               ),
             ]),
           ),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
-            initialValue: _vehicleId ?? (vehicles.vehicles.isNotEmpty ? vehicles.vehicles.first.id : null),
-            items: vehicles.vehicles.map((v) => DropdownMenuItem(value: v.id, child: Text('${v.vehicleName} (${v.vehicleNumber})'))).toList(),
+            initialValue: _vehicleId ??
+                (vehicles.vehicles.isNotEmpty
+                    ? vehicles.vehicles.first.id
+                    : null),
+            items: vehicles.vehicles
+                .map((v) => DropdownMenuItem(
+                    value: v.id,
+                    child: Text('${v.vehicleName} (${v.vehicleNumber})')))
+                .toList(),
             onChanged: (v) => setState(() => _vehicleId = v),
             validator: (v) => v == null ? 'Select vehicle' : null,
-            decoration: const InputDecoration(labelText: 'Vehicle', prefixIcon: Icon(Icons.directions_car)),
+            decoration: const InputDecoration(
+                labelText: 'Vehicle', prefixIcon: Icon(Icons.directions_car)),
           ),
           const SizedBox(height: 8),
           Row(children: [
             Expanded(
               child: RidePickField(
-                label: _date == null ? 'Select Date' : '${_date!.day}/${_date!.month}/${_date!.year}',
+                label: _date == null
+                    ? 'Select Date'
+                    : '${_date!.day}/${_date!.month}/${_date!.year}',
                 icon: Icons.calendar_today,
                 onTap: () async {
-                  final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 90)));
+                  final d = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 90)));
                   if (d != null) setState(() => _date = d);
                 },
               ),
@@ -582,7 +678,8 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                 label: _time == null ? 'Select Time' : _time!.format(context),
                 icon: Icons.access_time,
                 onTap: () async {
-                  final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                  final t = await showTimePicker(
+                      context: context, initialTime: TimeOfDay.now());
                   if (t != null) setState(() => _time = t);
                 },
               ),
@@ -593,9 +690,14 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
             Expanded(
               child: TextFormField(
                 controller: _priceCtrl,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(labelText: 'Price / Seat', prefixIcon: Icon(Icons.currency_rupee)),
-                validator: (v) => (double.tryParse(v?.trim() ?? '') ?? 0) > 0 ? null : 'Enter valid price',
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                    labelText: 'Price / Seat',
+                    prefixIcon: Icon(Icons.currency_rupee)),
+                validator: (v) => (double.tryParse(v?.trim() ?? '') ?? 0) > 0
+                    ? null
+                    : 'Enter valid price',
               ),
             ),
             const SizedBox(width: 8),
@@ -610,14 +712,23 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
             controller: _notesCtrl,
             minLines: 2,
             maxLines: 4,
-            decoration: const InputDecoration(labelText: 'Notes (optional)', prefixIcon: Icon(Icons.sticky_note_2_outlined)),
+            decoration: const InputDecoration(
+                labelText: 'Notes (optional)',
+                prefixIcon: Icon(Icons.sticky_note_2_outlined)),
           ),
           const SizedBox(height: 14),
           FilledButton.icon(
             onPressed: _isSubmitting ? null : _submit,
-            icon: _isSubmitting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.publish),
+            icon: _isSubmitting
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Icon(Icons.publish),
             label: Text(_isSubmitting ? 'Publishing...' : 'Publish Ride'),
-            style: FilledButton.styleFrom(backgroundColor: _accent, minimumSize: const Size.fromHeight(50)),
+            style: FilledButton.styleFrom(
+                backgroundColor: _accent,
+                minimumSize: const Size.fromHeight(50)),
           ),
         ],
       ),
@@ -628,12 +739,14 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
     return Stack(
       children: [
         gmap.GoogleMap(
-          initialCameraPosition: gmap.CameraPosition(target: gmap.LatLng(_center.latitude, _center.longitude), zoom: 12.5),
+          initialCameraPosition: gmap.CameraPosition(
+              target: gmap.LatLng(_center.latitude, _center.longitude),
+              zoom: 12.5),
           onMapCreated: (c) {
             if (!_mapCtrl.isCompleted) _mapCtrl.complete(c);
             _isMapReady = true;
           },
-          myLocationEnabled: true,
+          myLocationEnabled: route.canShowMyLocation,
           myLocationButtonEnabled: false,
           zoomControlsEnabled: false,
           mapToolbarEnabled: false,
@@ -641,22 +754,29 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
             if (route.pickup != null)
               gmap.Marker(
                 markerId: const gmap.MarkerId('pickup'),
-                position: gmap.LatLng(route.pickup!.latitude, route.pickup!.longitude),
-                icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueGreen),
+                position: gmap.LatLng(
+                    route.pickup!.latitude, route.pickup!.longitude),
+                icon: gmap.BitmapDescriptor.defaultMarkerWithHue(
+                    gmap.BitmapDescriptor.hueGreen),
                 zIndexInt: _mapPickMode == _OfferMapPickMode.pickup ? 3 : 1,
               ),
             if (route.destination != null)
               gmap.Marker(
                 markerId: const gmap.MarkerId('destination'),
-                position: gmap.LatLng(route.destination!.latitude, route.destination!.longitude),
-                icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueRed),
-                zIndexInt: _mapPickMode == _OfferMapPickMode.destination ? 3 : 1,
+                position: gmap.LatLng(
+                    route.destination!.latitude, route.destination!.longitude),
+                icon: gmap.BitmapDescriptor.defaultMarkerWithHue(
+                    gmap.BitmapDescriptor.hueRed),
+                zIndexInt:
+                    _mapPickMode == _OfferMapPickMode.destination ? 3 : 1,
               ),
             ...route.stops.asMap().entries.map((e) => gmap.Marker(
                   markerId: gmap.MarkerId('stop-${e.key}'),
                   position: gmap.LatLng(e.value.latitude, e.value.longitude),
-                  infoWindow: gmap.InfoWindow(title: 'Drop ${e.key + 1}', snippet: e.value.name),
-                  icon: gmap.BitmapDescriptor.defaultMarkerWithHue(gmap.BitmapDescriptor.hueAzure),
+                  infoWindow: gmap.InfoWindow(
+                      title: 'Drop ${e.key + 1}', snippet: e.value.name),
+                  icon: gmap.BitmapDescriptor.defaultMarkerWithHue(
+                      gmap.BitmapDescriptor.hueAzure),
                   zIndexInt: _mapPickMode == _OfferMapPickMode.stop ? 3 : 1,
                 )),
           },
@@ -673,17 +793,20 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
               ChoiceChip(
                 label: const Text('Pickup'),
                 selected: _mapPickMode == _OfferMapPickMode.pickup,
-                onSelected: (_) => setState(() => _mapPickMode = _OfferMapPickMode.pickup),
+                onSelected: (_) =>
+                    setState(() => _mapPickMode = _OfferMapPickMode.pickup),
               ),
               ChoiceChip(
                 label: const Text('Destination'),
                 selected: _mapPickMode == _OfferMapPickMode.destination,
-                onSelected: (_) => setState(() => _mapPickMode = _OfferMapPickMode.destination),
+                onSelected: (_) => setState(
+                    () => _mapPickMode = _OfferMapPickMode.destination),
               ),
               ChoiceChip(
                 label: const Text('Stop'),
                 selected: _mapPickMode == _OfferMapPickMode.stop,
-                onSelected: (_) => setState(() => _mapPickMode = _OfferMapPickMode.stop),
+                onSelected: (_) =>
+                    setState(() => _mapPickMode = _OfferMapPickMode.stop),
               ),
             ],
           ),
@@ -692,8 +815,10 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
           right: 12,
           bottom: 12,
           child: AppMapControls(
-            onZoomIn: () => _moveMap(route.destination ?? route.pickup ?? _center, 15.5),
-            onZoomOut: () => _moveMap(route.destination ?? route.pickup ?? _center, 11),
+            onZoomIn: () =>
+                _moveMap(route.destination ?? route.pickup ?? _center, 15.5),
+            onZoomOut: () =>
+                _moveMap(route.destination ?? route.pickup ?? _center, 11),
             onRecenter: () => _moveMap(route.pickup ?? _center, 15),
           ),
         ),
@@ -719,7 +844,9 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
           child: Row(
             children: [
               Expanded(
-                child: ClipRRect(borderRadius: BorderRadius.circular(24), child: _buildMap(route)),
+                child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: _buildMap(route)),
               ),
               const SizedBox(width: 16),
               Container(
@@ -727,7 +854,12 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFFF3F5FF),
                   borderRadius: BorderRadius.circular(24),
-                  boxShadow: const [BoxShadow(color: Color(0x18000000), blurRadius: 24, offset: Offset(0, 12))],
+                  boxShadow: const [
+                    BoxShadow(
+                        color: Color(0x18000000),
+                        blurRadius: 24,
+                        offset: Offset(0, 12))
+                  ],
                 ),
                 child: _buildPanelContent(route, vehicles),
               ),
@@ -753,9 +885,16 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
               child: Column(
                 children: [
                   const SizedBox(height: 8),
-                  Container(width: 42, height: 5, decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(10))),
+                  Container(
+                      width: 42,
+                      height: 5,
+                      decoration: BoxDecoration(
+                          color: Colors.black26,
+                          borderRadius: BorderRadius.circular(10))),
                   Expanded(
-                    child: PrimaryScrollController(controller: controller, child: _buildPanelContent(route, vehicles)),
+                    child: PrimaryScrollController(
+                        controller: controller,
+                        child: _buildPanelContent(route, vehicles)),
                   ),
                 ],
               ),

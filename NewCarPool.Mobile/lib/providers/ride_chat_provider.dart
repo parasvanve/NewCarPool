@@ -10,6 +10,7 @@ class RideChatProvider extends ChangeNotifier {
   final RideChatService _service;
   List<RideChatMessage> messages = [];
   bool isLoading = false;
+  bool isUploading = false;
   Timer? _pollTimer;
   String? _rideId;
 
@@ -46,9 +47,31 @@ class RideChatProvider extends ChangeNotifier {
   }
 
   Future<void> send(String rideOfferId, String message) async {
-    final sent = await _service.send(rideOfferId: rideOfferId, message: message);
+    final sent =
+        await _service.send(rideOfferId: rideOfferId, message: message);
     messages = [...messages, sent];
     notifyListeners();
+  }
+
+  Future<void> uploadAttachment({
+    required String rideOfferId,
+    required ChatAttachmentFile file,
+    String? caption,
+  }) async {
+    if (isUploading) return;
+    isUploading = true;
+    notifyListeners();
+    try {
+      final uploaded = await _service.uploadAttachment(
+        rideOfferId: rideOfferId,
+        file: file,
+        caption: caption,
+      );
+      messages = [...messages, uploaded];
+    } finally {
+      isUploading = false;
+      notifyListeners();
+    }
   }
 
   bool _sameMessages(List<RideChatMessage> a, List<RideChatMessage> b) {

@@ -17,7 +17,8 @@ class MapService {
     required double toLatitude,
     required double toLongitude,
   }) async {
-    final key = '${fromLatitude.toStringAsFixed(5)},${fromLongitude.toStringAsFixed(5)}->${toLatitude.toStringAsFixed(5)},${toLongitude.toStringAsFixed(5)}';
+    final key =
+        '${fromLatitude.toStringAsFixed(5)},${fromLongitude.toStringAsFixed(5)}->${toLatitude.toStringAsFixed(5)},${toLongitude.toStringAsFixed(5)}';
     final cached = _routeCache[key];
     if (cached != null && cached.isValid) {
       return cached.value;
@@ -42,14 +43,24 @@ class MapService {
     return data;
   }
 
-  Future<List<dynamic>> geocode(String query) async {
-    final key = query.trim().toLowerCase();
+  Future<List<dynamic>> geocode(
+    String query, {
+    double? latitude,
+    double? longitude,
+  }) async {
+    final key =
+        '${query.trim().toLowerCase()}@${latitude?.toStringAsFixed(3) ?? ''},${longitude?.toStringAsFixed(3) ?? ''}';
     final cached = _geocodeCache[key];
     if (cached != null && cached.isValid) {
       return cached.value;
     }
 
-    final response = await _apiClient.dio.get('/maps/geocode', queryParameters: {'query': query});
+    final response =
+        await _apiClient.dio.get('/maps/geocode', queryParameters: {
+      'query': query,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
+    });
     final data = response.data as List<dynamic>;
     _geocodeCache[key] = _CacheItem(data, DateTime.now().add(_ttl));
     return data;
@@ -59,7 +70,8 @@ class MapService {
     required double latitude,
     required double longitude,
   }) async {
-    final key = '${latitude.toStringAsFixed(5)},${longitude.toStringAsFixed(5)}';
+    final key =
+        '${latitude.toStringAsFixed(5)},${longitude.toStringAsFixed(5)}';
     final cached = _reverseGeocodeCache[key];
     if (cached != null && cached.isValid) {
       return cached.value;
@@ -73,7 +85,8 @@ class MapService {
       },
     );
     final data = Map<String, dynamic>.from(response.data as Map);
-    final value = (data['displayName'] ?? data['address'] ?? '').toString().trim();
+    final value =
+        (data['displayName'] ?? data['address'] ?? '').toString().trim();
     final label = value.isEmpty ? 'Current location' : value;
     _reverseGeocodeCache[key] = _CacheItem(label, DateTime.now().add(_ttl));
     return label;

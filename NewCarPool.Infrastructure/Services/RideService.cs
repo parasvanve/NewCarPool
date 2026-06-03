@@ -8,11 +8,31 @@ using NewCarPool.Domain.Entities;
 using NewCarPool.Domain.Enums;
 using Microsoft.Extensions.Logging;
 using Microsoft.Data.SqlClient;
+using Microsoft.AspNetCore.Hosting;
 
 namespace NewCarPool.Infrastructure.Services;
 
 public sealed class RideService : IRideService
 {
+    private const long MaxChatAttachmentSizeBytes = 10 * 1024 * 1024;
+
+    private static readonly IReadOnlyDictionary<string, RideChatMessageType> AllowedChatAttachmentTypes =
+        new Dictionary<string, RideChatMessageType>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["image/jpeg"] = RideChatMessageType.Image,
+            ["image/png"] = RideChatMessageType.Image,
+            ["image/webp"] = RideChatMessageType.Image,
+            ["application/pdf"] = RideChatMessageType.File,
+            ["text/plain"] = RideChatMessageType.File,
+            ["application/msword"] = RideChatMessageType.File,
+            ["application/vnd.openxmlformats-officedocument.wordprocessingml.document"] = RideChatMessageType.File,
+            ["application/vnd.ms-excel"] = RideChatMessageType.File,
+            ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"] = RideChatMessageType.File
+        };
+
+    private static readonly HashSet<string> BlockedChatAttachmentExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".exe", ".bat", ".cmd", ".js", ".apk" };
+
     private readonly IRideRepository _rides;
     private readonly IUserRepository _users;
     private readonly IGenericRepository<RideOffer> _rideOffers;
@@ -23,6 +43,7 @@ public sealed class RideService : IRideService
     private readonly Data.NewCarPoolDbContext _dbContext;
     private readonly ILogger<RideService> _logger;
     private readonly INotificationService _notificationService;
+    private readonly IWebHostEnvironment _environment;
 
     public RideService(
         IRideRepository rides,
@@ -34,6 +55,7 @@ public sealed class RideService : IRideService
         Data.NewCarPoolDbContext dbContext,
         ILogger<RideService> logger,
         INotificationService notificationService,
+        IWebHostEnvironment environment,
         IUnitOfWork unitOfWork)
     {
         _rides = rides;
@@ -45,6 +67,7 @@ public sealed class RideService : IRideService
         _dbContext = dbContext;
         _logger = logger;
         _notificationService = notificationService;
+        _environment = environment;
         _unitOfWork = unitOfWork;
     }
 
@@ -439,13 +462,7 @@ public sealed class RideService : IRideService
             .OrderBy(x => x.CreatedAtUtc)
             .Take(200)
             .ToListAsync(cancellationToken);
-        return messages.Select(m => new RideChatMessageDto(
-            m.Id,
-            rideOfferId,
-            m.SenderUserId,
-            m.SenderUser.FullName,
-            m.Message,
-            NormalizeToUtc(m.CreatedAtUtc))).ToList();
+        return messages.Select(MapChatMessage).ToList();
     }
 
     public async Task<RideChatMessageDto> SendRideChatMessageAsync(Guid userId, Guid rideOfferId, SendRideChatMessageRequest request, CancellationToken cancellationToken)
@@ -465,6 +482,7 @@ public sealed class RideService : IRideService
             RideChatGroupId = group.Id,
             SenderUserId = userId,
             Message = request.Message.Trim(),
+            MessageType = RideChatMessageType.Text,
             CreatedAtUtc = nowUtc
         };
         await _chatMessages.AddAsync(message, cancellationToken);
@@ -496,7 +514,93 @@ public sealed class RideService : IRideService
                     null),
                 cancellationToken);
         }
-        return new RideChatMessageDto(message.Id, rideOfferId, userId, sender.FullName, message.Message, NormalizeToUtc(message.CreatedAtUtc));
+        message.SenderUser = sender;
+        return MapChatMessage(message);
+    }
+
+    public async Task<RideChatMessageDto> UploadChatAttachmentAsync(
+        Guid rideOfferId,
+        Guid userId,
+        ChatAttachmentUpload upload,
+        CancellationToken cancellationToken)
+    {
+        await EnsureRideAccessAsync(userId, rideOfferId, cancellationToken);
+        if (upload.Content is null || upload.Length <= 0)
+        {
+            throw new ApiException("File is required.");
+        }
+
+        if (upload.Length > MaxChatAttachmentSizeBytes)
+        {
+            throw new ApiException("File size must be less than 10 MB.");
+        }
+
+        var contentType = upload.ContentType.Trim();
+        var originalFileName = Path.GetFileName(upload.FileName);
+        var extension = Path.GetExtension(originalFileName);
+        if (BlockedChatAttachmentExtensions.Contains(extension) ||
+            !AllowedChatAttachmentTypes.TryGetValue(contentType, out var messageType))
+        {
+            throw new ApiException("File type is not supported.");
+        }
+
+        var sender = await _users.GetByIdAsync(userId, cancellationToken)
+            ?? throw new ApiException("User not found.", 404);
+        var group = await EnsureRideChatGroupAsync(rideOfferId, cancellationToken);
+        var safeOriginalFileName = BuildSafeFileName(originalFileName);
+        var storedFileName = $"{Guid.NewGuid():N}_{safeOriginalFileName}";
+        var relativeDirectory = Path.Combine("uploads", "ride-chat", rideOfferId.ToString());
+        var absoluteDirectory = Path.Combine(_environment.WebRootPath ?? Path.Combine(_environment.ContentRootPath, "wwwroot"), relativeDirectory);
+        Directory.CreateDirectory(absoluteDirectory);
+        var absolutePath = Path.Combine(absoluteDirectory, storedFileName);
+
+        await using (var output = File.Create(absolutePath))
+        {
+            await upload.Content.CopyToAsync(output, cancellationToken);
+        }
+
+        var attachmentUrl = $"/uploads/ride-chat/{rideOfferId}/{storedFileName}";
+        var message = new RideChatMessage
+        {
+            Id = Guid.NewGuid(),
+            RideChatGroupId = group.Id,
+            SenderUserId = userId,
+            Message = Truncate(upload.Caption, 2000),
+            MessageType = messageType,
+            AttachmentUrl = attachmentUrl,
+            AttachmentFileName = safeOriginalFileName,
+            AttachmentContentType = contentType,
+            AttachmentSizeBytes = upload.Length,
+            CreatedAtUtc = DateTime.UtcNow
+        };
+        await _chatMessages.AddAsync(message, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var participantIds = await _rideBookings.Query()
+            .Where(x => x.RideOfferId == rideOfferId && x.Status == BookingStatus.Confirmed)
+            .Select(x => x.PassengerId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var driverId = await _rideOffers.Query()
+            .Where(x => x.Id == rideOfferId)
+            .Select(x => x.DriverId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (driverId != Guid.Empty) participantIds.Add(driverId);
+        foreach (var recipientId in participantIds.Where(x => x != userId).Distinct())
+        {
+            await _notificationService.CreateAsync(
+                recipientId,
+                new Application.DTOs.Notifications.CreateNotificationRequest(
+                    messageType == RideChatMessageType.Image ? "New image in ride chat" : "New file in ride chat",
+                    $"{sender.FullName} shared {safeOriginalFileName}.",
+                    NotificationType.NewMessage,
+                    rideOfferId,
+                    null),
+                cancellationToken);
+        }
+
+        message.SenderUser = sender;
+        return MapChatMessage(message);
     }
 
     public Task<RideOfferDto> StartRideAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken) =>
@@ -755,7 +859,7 @@ public sealed class RideService : IRideService
             cancellationToken);
         if (!isParticipant)
         {
-            throw new ApiException("Only booked participants can access ride chat.", 403);
+            throw new ApiException("You do not have access to this ride chat.", 403);
         }
     }
 
@@ -779,6 +883,20 @@ public sealed class RideService : IRideService
             booking.Status,
             booking.CreatedAtUtc);
 
+    private static RideChatMessageDto MapChatMessage(RideChatMessage message) =>
+        new(
+            message.Id,
+            message.RideChatGroupId,
+            message.SenderUserId,
+            message.SenderUser?.FullName ?? string.Empty,
+            message.Message,
+            NormalizeToUtc(message.CreatedAtUtc),
+            message.MessageType,
+            message.AttachmentUrl,
+            message.AttachmentFileName,
+            message.AttachmentContentType,
+            message.AttachmentSizeBytes);
+
     private static string Truncate(string? value, int maxLength)
     {
         var text = value?.Trim() ?? string.Empty;
@@ -792,5 +910,16 @@ public sealed class RideService : IRideService
         if (string.IsNullOrWhiteSpace(text)) return "Location";
         var comma = text.IndexOf(',');
         return comma > 0 ? text[..comma].Trim() : text;
+    }
+
+    private static string BuildSafeFileName(string fileName)
+    {
+        var name = Path.GetFileName(fileName);
+        var invalidChars = Path.GetInvalidFileNameChars();
+        var safeChars = name
+            .Select(ch => invalidChars.Contains(ch) ? '_' : ch)
+            .ToArray();
+        var safeName = new string(safeChars).Trim('.', ' ', '_');
+        return string.IsNullOrWhiteSpace(safeName) ? "attachment" : Truncate(safeName, 255);
     }
 }

@@ -19,8 +19,12 @@ public sealed class MapsController : ControllerBase
         Ok(await _mapService.CalculateRouteAsync(request, cancellationToken));
 
     [HttpGet("geocode")]
-    public async Task<ActionResult<IReadOnlyList<GeocodeResultDto>>> Search([FromQuery] string query, CancellationToken cancellationToken) =>
-        Ok(await _mapService.SearchPlacesAsync(query, cancellationToken));
+    public async Task<ActionResult<IReadOnlyList<GeocodeResultDto>>> Search(
+        [FromQuery] string query,
+        [FromQuery] double? latitude,
+        [FromQuery] double? longitude,
+        CancellationToken cancellationToken) =>
+        Ok(await _mapService.SearchPlacesAsync(query, latitude, longitude, cancellationToken));
 
     [HttpGet("reverse-geocode")]
     public async Task<ActionResult<ReverseGeocodeResultDto>> ReverseGeocode(
