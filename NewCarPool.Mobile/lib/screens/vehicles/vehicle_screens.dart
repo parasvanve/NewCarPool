@@ -217,7 +217,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                 TextFormField(
                   controller: _number,
                   decoration: const InputDecoration(labelText: 'Vehicle Number', prefixIcon: Icon(Icons.confirmation_number_outlined)),
-                  validator: (v) => _required(v, 'Vehicle number'),
+                  validator: _validateVehicleNumber,
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<VehicleType>(
@@ -225,6 +225,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                   decoration: const InputDecoration(labelText: 'Vehicle Type', prefixIcon: Icon(Icons.category_outlined)),
                   items: VehicleType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.label))).toList(),
                   onChanged: (v) => setState(() => _type = v ?? VehicleType.sedan),
+                  validator: (v) => v == null ? 'Vehicle type is required' : null,
                 ),
                 const SizedBox(height: 12),
                 TextFormField(
@@ -270,6 +271,10 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
+    if (_seats < 1) {
+      AppSnackBar.showError(context, 'Seats required and minimum 1');
+      return;
+    }
     setState(() => _isSaving = true);
     final input = UpsertVehicleInput(
       vehicleName: _name.text.trim(),
@@ -304,5 +309,15 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
   String? _required(String? value, String field) {
     if (value == null || value.trim().isEmpty) return '$field is required';
     return null;
+  }
+
+  String? _validateVehicleNumber(String? value) {
+    final requiredError = _required(value, 'Vehicle number');
+    if (requiredError != null) return requiredError;
+
+    final normalized = value!.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
+    final isValid =
+        RegExp(r'^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$').hasMatch(normalized);
+    return isValid ? null : 'Enter a valid vehicle number';
   }
 }

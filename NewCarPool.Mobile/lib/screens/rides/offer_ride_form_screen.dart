@@ -16,6 +16,7 @@ import '../../providers/offer_ride_provider.dart';
 import '../../providers/ride_provider.dart';
 import '../../providers/vehicle_provider.dart';
 import '../../services/map_service.dart';
+import '../vehicles/vehicle_screens.dart';
 import 'widgets/ride_form_shared_widgets.dart';
 
 class OfferRideFormScreen extends StatefulWidget {
@@ -49,6 +50,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
   Map<String, dynamic>? _pickupSelection;
   Map<String, dynamic>? _destinationSelection;
   _OfferMapPickMode _mapPickMode = _OfferMapPickMode.pickup;
+  String? _vehicleError;
 
   @override
   void initState() {
@@ -436,28 +438,72 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
     );
   }
 
+  Future<void> _openAddVehicle() async {
+    final vehicleProvider = context.read<VehicleProvider>();
+    final existingIds = vehicleProvider.vehicles.map((v) => v.id).toSet();
+
+    await Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const VehicleFormScreen()));
+    if (!mounted) return;
+
+    try {
+      await vehicleProvider.loadMine();
+      if (!mounted) return;
+      String? newVehicleId;
+      for (final vehicle in vehicleProvider.vehicles) {
+        if (!existingIds.contains(vehicle.id)) {
+          newVehicleId = vehicle.id;
+          break;
+        }
+      }
+      setState(() {
+        _vehicleId = newVehicleId ??
+            (vehicleProvider.vehicles.isNotEmpty
+                ? vehicleProvider.vehicles.first.id
+                : null);
+        _vehicleError = null;
+      });
+    } catch (_) {
+      _showInlineWarning('Could not reload vehicles.');
+    }
+  }
+
   Future<void> _submit() async {
-    if (_isSubmitting || !_formKey.currentState!.validate()) return;
+    if (_isSubmitting) return;
     final route = context.read<OfferRideProvider>();
-    if (route.pickup == null || route.destination == null) {
-      _showInlineWarning('Pickup and destination are required');
+    if (route.pickup == null) {
+      _showInlineWarning('Pickup location required');
       return;
     }
-    if (_destCtrl.text.trim().isEmpty) {
-      _showInlineWarning('Please select a location from suggestions.');
-      return;
-    }
-    if (_date == null || _time == null) {
-      _showInlineWarning('Select departure date and time');
+    if (route.destination == null || _destCtrl.text.trim().isEmpty) {
+      _showInlineWarning('Destination required');
       return;
     }
 
     final vehicles = context.read<VehicleProvider>().vehicles;
     final vId = _vehicleId ?? (vehicles.isNotEmpty ? vehicles.first.id : null);
-    if (vId == null) {
-      _showInlineWarning('Please add/select vehicle');
+    if (vId == null || !vehicles.any((x) => x.id == vId)) {
+      const message = 'Please add or select a vehicle before publishing a ride.';
+      setState(() => _vehicleError = message);
+      _showInlineWarning(message);
       return;
     }
+    setState(() => _vehicleError = null);
+
+    if (_date == null) {
+      _showInlineWarning('Date required');
+      return;
+    }
+    if (_time == null) {
+      _showInlineWarning('Time required');
+      return;
+    }
+    if (!_formKey.currentState!.validate()) return;
+    if (_seats < 1) {
+      _showInlineWarning('Seats required and at least 1');
+      return;
+    }
+
     final v = vehicles.firstWhere((x) => x.id == vId);
     final selectedLocalDeparture = DateTime(
       _date!.year,
@@ -475,7 +521,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
     );
     final price = double.tryParse(_priceCtrl.text.trim());
     if (price == null || price <= 0) {
-      _showInlineWarning('Enter valid price');
+      _showInlineWarning('Price per seat required and greater than 0');
       return;
     }
 
@@ -639,21 +685,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
             ]),
           ),
           const SizedBox(height: 8),
-          DropdownButtonFormField<String>(
-            initialValue: _vehicleId ??
-                (vehicles.vehicles.isNotEmpty
-                    ? vehicles.vehicles.first.id
-                    : null),
-            items: vehicles.vehicles
-                .map((v) => DropdownMenuItem(
-                    value: v.id,
-                    child: Text('${v.vehicleName} (${v.vehicleNumber})')))
-                .toList(),
-            onChanged: (v) => setState(() => _vehicleId = v),
-            validator: (v) => v == null ? 'Select vehicle' : null,
-            decoration: const InputDecoration(
-                labelText: 'Vehicle', prefixIcon: Icon(Icons.directions_car)),
-          ),
+          _buildVehicleSection(vehicles),
           const SizedBox(height: 8),
           Row(children: [
             Expanded(
@@ -697,7 +729,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
                     prefixIcon: Icon(Icons.currency_rupee)),
                 validator: (v) => (double.tryParse(v?.trim() ?? '') ?? 0) > 0
                     ? null
-                    : 'Enter valid price',
+                    : 'Price per seat required and greater than 0',
               ),
             ),
             const SizedBox(width: 8),
@@ -732,6 +764,86 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildVehicleSection(VehicleProvider vehicles) {
+    if (vehicles.isLoading && vehicles.vehicles.isEmpty) {
+      return const InputDecorator(
+        decoration: InputDecoration(
+            labelText: 'Vehicle', prefixIcon: Icon(Icons.directions_car)),
+        child: LinearProgressIndicator(),
+      );
+    }
+
+    if (vehicles.vehicles.isEmpty) {
+      final hasError = _vehicleError != null;
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: hasError ? Colors.red : const Color(0xFFE2E8F0),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.directions_car, color: _accent),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('No vehicle added',
+                          style: TextStyle(fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 3),
+                      Text('Add your vehicle to publish a ride',
+                          style: Theme.of(context).textTheme.bodySmall),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (hasError) ...[
+              const SizedBox(height: 8),
+              Text(_vehicleError!,
+                  style: const TextStyle(color: Colors.red, fontSize: 12)),
+            ],
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: _openAddVehicle,
+              style: FilledButton.styleFrom(backgroundColor: _accent),
+              child: const Text('+ Add Vehicle'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final selectedVehicleId = vehicles.vehicles.any((v) => v.id == _vehicleId)
+        ? _vehicleId
+        : vehicles.vehicles.first.id;
+
+    return DropdownButtonFormField<String>(
+      initialValue: selectedVehicleId,
+      items: vehicles.vehicles
+          .map((v) => DropdownMenuItem(
+              value: v.id,
+              child: Text('${v.vehicleName} (${v.vehicleNumber})')))
+          .toList(),
+      onChanged: (v) => setState(() {
+        _vehicleId = v;
+        _vehicleError = null;
+      }),
+      validator: (v) =>
+          v == null ? 'Please add or select a vehicle before publishing a ride.' : null,
+      decoration: const InputDecoration(
+          labelText: 'Vehicle', prefixIcon: Icon(Icons.directions_car)),
     );
   }
 
