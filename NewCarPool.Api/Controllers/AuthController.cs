@@ -18,6 +18,14 @@ public sealed class AuthController : ControllerBase
     public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request, CancellationToken cancellationToken) =>
         Ok(await _authService.RegisterAsync(request, cancellationToken));
 
+    [HttpPost("send-register-otp")]
+    public async Task<ActionResult<RegisterOtpResponse>> SendRegisterOtp(SendRegisterOtpRequest request, CancellationToken cancellationToken) =>
+        Ok(await _authService.SendRegisterOtpAsync(request, cancellationToken));
+
+    [HttpPost("verify-register-otp")]
+    public async Task<ActionResult<AuthResponse>> VerifyRegisterOtp(VerifyRegisterOtpRequest request, CancellationToken cancellationToken) =>
+        Ok(await _authService.VerifyRegisterOtpAsync(request, cancellationToken));
+
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request, CancellationToken cancellationToken) =>
         Ok(await _authService.LoginAsync(request, cancellationToken));

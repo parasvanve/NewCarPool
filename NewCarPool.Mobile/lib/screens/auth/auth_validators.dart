@@ -14,7 +14,7 @@ class AuthValidators {
 
     final email = value!.trim();
     if (!email.contains('@') || !email.contains('.')) {
-      return 'Enter a valid email';
+      return 'Enter a valid email address';
     }
     return null;
   }
@@ -40,7 +40,7 @@ class AuthValidators {
     final phone = value!.trim();
 
     if (!RegExp(r'^[6-9]\d{9}$').hasMatch(phone)) {
-      return 'Enter a valid 10 digit phone number';
+      return 'Enter a valid phone number';
     }
 
     return null;

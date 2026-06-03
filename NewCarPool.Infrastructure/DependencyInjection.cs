@@ -8,6 +8,7 @@ using NewCarPool.Application.Interfaces.Repositories;
 using NewCarPool.Application.Interfaces.Services;
 using NewCarPool.Infrastructure.Authentication;
 using NewCarPool.Infrastructure.Data;
+using NewCarPool.Infrastructure.Email;
 using NewCarPool.Infrastructure.Repositories;
 using NewCarPool.Infrastructure.Services;
 
@@ -18,6 +19,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        services.Configure<SmtpOptions>(configuration.GetSection(SmtpOptions.SectionName));
         var jwtOptions = configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
             ?? throw new InvalidOperationException("Jwt configuration is missing.");
 
@@ -79,6 +81,7 @@ public static class DependencyInjection
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<ITokenService, TokenService>();
+        services.AddScoped<IEmailService, SmtpEmailService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IRideService, RideService>();
         services.AddScoped<IBookingService, BookingService>();

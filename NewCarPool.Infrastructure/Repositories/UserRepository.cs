@@ -20,6 +20,9 @@ public sealed class UserRepository : IUserRepository
     public Task<bool> ExistsByEmailAsync(string email, CancellationToken cancellationToken) =>
         _dbContext.Users.AnyAsync(x => x.Email == email, cancellationToken);
 
+    public Task<bool> ExistsByPhoneNumberAsync(string phoneNumber, CancellationToken cancellationToken) =>
+        _dbContext.Users.AnyAsync(x => x.PhoneNumber == phoneNumber, cancellationToken);
+
     public async Task AddAsync(User user, CancellationToken cancellationToken) =>
         await _dbContext.Users.AddAsync(user, cancellationToken);
 }

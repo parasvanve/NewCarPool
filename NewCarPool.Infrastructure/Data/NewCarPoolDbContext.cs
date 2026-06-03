@@ -12,6 +12,7 @@ public sealed class NewCarPoolDbContext : DbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<PendingRegistrationOtp> PendingRegistrationOtps => Set<PendingRegistrationOtp>();
     public DbSet<Vehicle> Vehicles => Set<Vehicle>();
     public DbSet<RideOffer> RideOffers => Set<RideOffer>();
     public DbSet<RideStop> RideStops => Set<RideStop>();

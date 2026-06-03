@@ -24,6 +24,33 @@ class AuthProvider extends ChangeNotifier {
     await _runAuth(() => _authService.register(fullName, email, phoneNumber, password));
   }
 
+  Future<DateTime?> sendRegisterOtp({
+    required String fullName,
+    required String email,
+    required String phoneNumber,
+    required String password,
+    required String confirmPassword,
+  }) async {
+    isLoading = true;
+    notifyListeners();
+    try {
+      return await _authService.sendRegisterOtp(
+        fullName: fullName,
+        email: email,
+        phoneNumber: phoneNumber,
+        password: password,
+        confirmPassword: confirmPassword,
+      );
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> verifyRegisterOtp(String email, String otp) async {
+    await _runAuth(() => _authService.verifyRegisterOtp(email, otp));
+  }
+
   Future<void> forgotPassword(String email) async {
     isLoading = true;
     notifyListeners();

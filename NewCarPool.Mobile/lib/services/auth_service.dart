@@ -24,6 +24,32 @@ class AuthService {
     return AuthSession.fromJson(response.data);
   }
 
+  Future<DateTime?> sendRegisterOtp({
+    required String fullName,
+    required String email,
+    required String phoneNumber,
+    required String password,
+    required String confirmPassword,
+  }) async {
+    final response = await _apiClient.dio.post('/auth/send-register-otp', data: {
+      'fullName': fullName,
+      'email': email,
+      'phoneNumber': phoneNumber,
+      'password': password,
+      'confirmPassword': confirmPassword,
+    });
+    final resendAt = response.data['resendAvailableAtUtc']?.toString();
+    return resendAt == null ? null : DateTime.tryParse(resendAt);
+  }
+
+  Future<AuthSession> verifyRegisterOtp(String email, String otp) async {
+    final response = await _apiClient.dio.post('/auth/verify-register-otp', data: {
+      'email': email,
+      'otp': otp,
+    });
+    return AuthSession.fromJson(response.data);
+  }
+
   Future<String> forgotPassword(String email) async {
     final response = await _apiClient.dio.post('/auth/forgot-password', data: {
       'email': email,
