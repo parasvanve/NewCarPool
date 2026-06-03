@@ -33,43 +33,55 @@ public sealed class BookingService : IBookingService
 
     public async Task<RideBookingDto> CancelAsync(Guid passengerId, Guid bookingId, string? reason, CancellationToken cancellationToken)
     {
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var booking = await Query().FirstOrDefaultAsync(x => x.Id == bookingId, cancellationToken) ?? throw new ApiException("Booking not found.", 404);
-        if (booking.PassengerId != passengerId)
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            throw new ApiException("You cannot cancel this booking.", 403);
-        }
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
+            {
+                var booking = await Query().FirstOrDefaultAsync(x => x.Id == bookingId, cancellationToken) ?? throw new ApiException("Booking not found.", 404);
+                if (booking.PassengerId != passengerId)
+                {
+                    throw new ApiException("You cannot cancel this booking.", 403);
+                }
 
-        if (booking.Status == BookingStatus.Cancelled)
-        {
-            throw new ApiException("Booking already cancelled.");
-        }
+                if (booking.Status == BookingStatus.Cancelled)
+                {
+                    throw new ApiException("Booking already cancelled.");
+                }
 
-        if (booking.RideOffer.Status == RideStatus.Completed)
-        {
-            throw new ApiException("Ride already completed.");
-        }
+                if (booking.RideOffer.Status == RideStatus.Completed)
+                {
+                    throw new ApiException("Ride already completed.");
+                }
 
-        booking.Status = BookingStatus.Cancelled;
-        booking.CancelledAtUtc = DateTime.UtcNow;
-        booking.RideOffer.AvailableSeats += booking.SeatsBooked;
-        if (booking.RideOffer.Status == RideStatus.Full)
-        {
-            booking.RideOffer.Status = RideStatus.Open;
-        }
+                booking.Status = BookingStatus.Cancelled;
+                booking.CancelledAtUtc = DateTime.UtcNow;
+                booking.RideOffer.AvailableSeats += booking.SeatsBooked;
+                if (booking.RideOffer.Status == RideStatus.Full)
+                {
+                    booking.RideOffer.Status = RideStatus.Open;
+                }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        await _notificationService.CreateAsync(
-            booking.RideOffer.DriverId,
-            new Application.DTOs.Notifications.CreateNotificationRequest(
-                "Booking cancelled",
-                $"{booking.Passenger?.FullName ?? "Passenger"} cancelled booking for your ride.",
-                NotificationType.RideCancelled,
-                booking.RideOfferId,
-                booking.Id),
-            cancellationToken);
-        return Map(booking);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await _notificationService.CreateAsync(
+                    booking.RideOffer.DriverId,
+                    new Application.DTOs.Notifications.CreateNotificationRequest(
+                        "Booking cancelled",
+                        $"{booking.Passenger?.FullName ?? "Passenger"} cancelled booking for your ride.",
+                        NotificationType.RideCancelled,
+                        booking.RideOfferId,
+                        booking.Id),
+                    cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return Map(booking);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+        });
     }
 
     public async Task<IReadOnlyList<RideBookingDto>> HistoryAsync(Guid userId, CancellationToken cancellationToken) =>
@@ -80,26 +92,38 @@ public sealed class BookingService : IBookingService
 
     private async Task<RideBookingDto> ChangeByDriverAsync(Guid driverId, Guid bookingId, BookingStatus status, CancellationToken cancellationToken, bool restoreSeats = false)
     {
-        await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var booking = await Query().FirstOrDefaultAsync(x => x.Id == bookingId, cancellationToken) ?? throw new ApiException("Booking not found.", 404);
-        if (booking.RideOffer.DriverId != driverId)
+        var strategy = _dbContext.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            throw new ApiException("Only the driver can update this booking.", 403);
-        }
-
-        if (restoreSeats && booking.Status != BookingStatus.Rejected)
-        {
-            booking.RideOffer.AvailableSeats += booking.SeatsBooked;
-            if (booking.RideOffer.Status == RideStatus.Full)
+            await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
+            try
             {
-                booking.RideOffer.Status = RideStatus.Open;
-            }
-        }
+                var booking = await Query().FirstOrDefaultAsync(x => x.Id == bookingId, cancellationToken) ?? throw new ApiException("Booking not found.", 404);
+                if (booking.RideOffer.DriverId != driverId)
+                {
+                    throw new ApiException("Only the driver can update this booking.", 403);
+                }
 
-        booking.Status = status;
-        await _dbContext.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return Map(booking);
+                if (restoreSeats && booking.Status != BookingStatus.Rejected)
+                {
+                    booking.RideOffer.AvailableSeats += booking.SeatsBooked;
+                    if (booking.RideOffer.Status == RideStatus.Full)
+                    {
+                        booking.RideOffer.Status = RideStatus.Open;
+                    }
+                }
+
+                booking.Status = status;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return Map(booking);
+            }
+            catch
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw;
+            }
+        });
     }
 
     private IQueryable<RideBooking> Query() =>

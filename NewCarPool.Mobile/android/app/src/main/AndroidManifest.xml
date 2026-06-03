@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
-        android:label="new_car_pool"
+        android:label="New Carpool"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

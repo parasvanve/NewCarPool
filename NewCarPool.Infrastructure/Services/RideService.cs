@@ -259,131 +259,143 @@ public sealed class RideService : IRideService
                 rideId,
                 request.SeatsBooked);
 
-            await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-            var passenger = await _users.GetByIdAsync(passengerId, cancellationToken)
-                ?? throw new ApiException("Passenger not found.", 404);
-            var ride = await _rides.GetRideByIdAsync(rideId, cancellationToken)
-                ?? throw new ApiException("Ride not found.", 404);
-
-            _logger.LogInformation(
-                "Book ride loaded ride. RideId={RideId}, RideDriverId={RideDriverId}, AvailableSeats={AvailableSeats}, RideStatus={RideStatus}",
-                ride.Id,
-                ride.DriverId,
-                ride.AvailableSeats,
-                ride.Status);
-
-            var existingBooking = await _rideBookings.Query()
-                .FirstOrDefaultAsync(
-                    x => x.RideOfferId == rideId
-                         && x.PassengerId == passengerId,
-                    cancellationToken);
-
-            _logger.LogInformation(
-                "Book ride existing booking. PassengerId={PassengerId}, RideId={RideId}, Exists={Exists}, ExistingStatus={ExistingStatus}",
-                passengerId,
-                rideId,
-                existingBooking != null,
-                existingBooking?.Status);
-
-            if (existingBooking is { Status: BookingStatus.Confirmed })
+            var strategy = _dbContext.Database.CreateExecutionStrategy();
+            return await strategy.ExecuteAsync(async () =>
             {
-                throw new ApiException("You have already booked this ride.");
-            }
-
-            if (ride.DriverId == passengerId)
-            {
-                throw new ApiException("You cannot book your own ride.");
-            }
-
-            if (ride.AvailableSeats <= 0 || ride.Status == RideStatus.Full)
-            {
-                throw new ApiException("Ride is full.");
-            }
-
-            if (ride.Status != RideStatus.Open)
-            {
-                throw new ApiException("Ride is not open for booking.");
-            }
-
-            if (request.SeatsBooked <= 0 || request.SeatsBooked > ride.AvailableSeats)
-            {
-                throw new ApiException("Requested seats are not available.");
-            }
-
-            ValidateBookingPoint(request.Pickup, "Pickup");
-            ValidateBookingPoint(request.Drop, "Drop");
-
-            ride.AvailableSeats -= request.SeatsBooked;
-            ride.Status = ride.AvailableSeats == 0 ? RideStatus.Full : RideStatus.Open;
-            ride.UpdatedAtUtc = DateTime.UtcNow;
-
-            RideBooking booking;
-            if (existingBooking == null)
-            {
-                booking = new RideBooking
+                await using var transaction = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+                try
                 {
-                    Id = Guid.NewGuid(),
-                    PassengerId = passengerId,
-                    RideOfferId = ride.Id,
-                    SeatsBooked = request.SeatsBooked,
-                    PassengerPickupName = Truncate(request.Pickup.Name, 300),
-                    PassengerPickupAddress = Truncate(request.Pickup.Address ?? request.Pickup.Name, 500),
-                    PassengerPickupLatitude = request.Pickup.Latitude,
-                    PassengerPickupLongitude = request.Pickup.Longitude,
-                    PassengerDropName = Truncate(request.Drop.Name, 300),
-                    PassengerDropAddress = Truncate(request.Drop.Address ?? request.Drop.Name, 500),
-                    PassengerDropLatitude = request.Drop.Latitude,
-                    PassengerDropLongitude = request.Drop.Longitude,
-                    Status = BookingStatus.Confirmed
-                };
-                await _rides.AddBookingAsync(booking, cancellationToken);
-            }
-            else
-            {
-                booking = existingBooking;
-                booking.SeatsBooked = request.SeatsBooked;
-                booking.PassengerPickupName = Truncate(request.Pickup.Name, 300);
-                booking.PassengerPickupAddress = Truncate(request.Pickup.Address ?? request.Pickup.Name, 500);
-                booking.PassengerPickupLatitude = request.Pickup.Latitude;
-                booking.PassengerPickupLongitude = request.Pickup.Longitude;
-                booking.PassengerDropName = Truncate(request.Drop.Name, 300);
-                booking.PassengerDropAddress = Truncate(request.Drop.Address ?? request.Drop.Name, 500);
-                booking.PassengerDropLatitude = request.Drop.Latitude;
-                booking.PassengerDropLongitude = request.Drop.Longitude;
-                booking.Status = BookingStatus.Confirmed;
-                booking.CancelledAtUtc = null;
-            }
+                    var passenger = await _users.GetByIdAsync(passengerId, cancellationToken)
+                        ?? throw new ApiException("Passenger not found.", 404);
+                    var ride = await _rides.GetRideByIdAsync(rideId, cancellationToken)
+                        ?? throw new ApiException("Ride not found.", 404);
 
-            var notificationMessage =
-                $"{passenger.FullName} booked your ride from {ShortLocationName(ride.OriginName)} to {ShortLocationName(ride.DestinationName)}. " +
-                $"Pickup: {ShortLocationName(booking.PassengerPickupName)}. Drop: {ShortLocationName(booking.PassengerDropName)}. Seats: {booking.SeatsBooked}.";
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
-            await EnsureRideChatGroupAsync(ride.Id, cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-            await _notificationService.CreateAsync(
-                ride.DriverId,
-                new Application.DTOs.Notifications.CreateNotificationRequest(
-                    "New ride booking",
-                    Truncate(notificationMessage, 1000),
-                    NotificationType.RideBooked,
-                    ride.Id,
-                    booking.Id),
-                cancellationToken);
-            await _notificationService.CreateAsync(
-                passengerId,
-                new Application.DTOs.Notifications.CreateNotificationRequest(
-                    "Ride booked successfully",
-                    Truncate(
-                        $"Your ride with {ride.Driver?.FullName ?? "Driver"} is confirmed. " +
-                        $"Pickup: {ShortLocationName(booking.PassengerPickupName)}. " +
-                        $"Drop: {ShortLocationName(booking.PassengerDropName)}. Seats: {booking.SeatsBooked}.",
-                        1000),
-                    NotificationType.BookingConfirmed,
-                    ride.Id,
-                    booking.Id),
-                cancellationToken);
-            booking.Passenger = passenger;
-            return MapBooking(booking);
+                    _logger.LogInformation(
+                        "Book ride loaded ride. RideId={RideId}, RideDriverId={RideDriverId}, AvailableSeats={AvailableSeats}, RideStatus={RideStatus}",
+                        ride.Id,
+                        ride.DriverId,
+                        ride.AvailableSeats,
+                        ride.Status);
+
+                    var existingBooking = await _rideBookings.Query()
+                        .FirstOrDefaultAsync(
+                            x => x.RideOfferId == rideId
+                                 && x.PassengerId == passengerId,
+                            cancellationToken);
+
+                    _logger.LogInformation(
+                        "Book ride existing booking. PassengerId={PassengerId}, RideId={RideId}, Exists={Exists}, ExistingStatus={ExistingStatus}",
+                        passengerId,
+                        rideId,
+                        existingBooking != null,
+                        existingBooking?.Status);
+
+                    if (existingBooking is { Status: BookingStatus.Confirmed })
+                    {
+                        throw new ApiException("You have already booked this ride.");
+                    }
+
+                    if (ride.DriverId == passengerId)
+                    {
+                        throw new ApiException("You cannot book your own ride.");
+                    }
+
+                    if (ride.AvailableSeats <= 0 || ride.Status == RideStatus.Full)
+                    {
+                        throw new ApiException("Ride is full.");
+                    }
+
+                    if (ride.Status != RideStatus.Open)
+                    {
+                        throw new ApiException("Ride is not open for booking.");
+                    }
+
+                    if (request.SeatsBooked <= 0 || request.SeatsBooked > ride.AvailableSeats)
+                    {
+                        throw new ApiException("Requested seats are not available.");
+                    }
+
+                    ValidateBookingPoint(request.Pickup, "Pickup");
+                    ValidateBookingPoint(request.Drop, "Drop");
+
+                    ride.AvailableSeats -= request.SeatsBooked;
+                    ride.Status = ride.AvailableSeats == 0 ? RideStatus.Full : RideStatus.Open;
+                    ride.UpdatedAtUtc = DateTime.UtcNow;
+
+                    RideBooking booking;
+                    if (existingBooking == null)
+                    {
+                        booking = new RideBooking
+                        {
+                            Id = Guid.NewGuid(),
+                            PassengerId = passengerId,
+                            RideOfferId = ride.Id,
+                            SeatsBooked = request.SeatsBooked,
+                            PassengerPickupName = Truncate(request.Pickup.Name, 300),
+                            PassengerPickupAddress = Truncate(request.Pickup.Address ?? request.Pickup.Name, 500),
+                            PassengerPickupLatitude = request.Pickup.Latitude,
+                            PassengerPickupLongitude = request.Pickup.Longitude,
+                            PassengerDropName = Truncate(request.Drop.Name, 300),
+                            PassengerDropAddress = Truncate(request.Drop.Address ?? request.Drop.Name, 500),
+                            PassengerDropLatitude = request.Drop.Latitude,
+                            PassengerDropLongitude = request.Drop.Longitude,
+                            Status = BookingStatus.Confirmed
+                        };
+                        await _rides.AddBookingAsync(booking, cancellationToken);
+                    }
+                    else
+                    {
+                        booking = existingBooking;
+                        booking.SeatsBooked = request.SeatsBooked;
+                        booking.PassengerPickupName = Truncate(request.Pickup.Name, 300);
+                        booking.PassengerPickupAddress = Truncate(request.Pickup.Address ?? request.Pickup.Name, 500);
+                        booking.PassengerPickupLatitude = request.Pickup.Latitude;
+                        booking.PassengerPickupLongitude = request.Pickup.Longitude;
+                        booking.PassengerDropName = Truncate(request.Drop.Name, 300);
+                        booking.PassengerDropAddress = Truncate(request.Drop.Address ?? request.Drop.Name, 500);
+                        booking.PassengerDropLatitude = request.Drop.Latitude;
+                        booking.PassengerDropLongitude = request.Drop.Longitude;
+                        booking.Status = BookingStatus.Confirmed;
+                        booking.CancelledAtUtc = null;
+                    }
+
+                    var notificationMessage =
+                        $"{passenger.FullName} booked your ride from {ShortLocationName(ride.OriginName)} to {ShortLocationName(ride.DestinationName)}. " +
+                        $"Pickup: {ShortLocationName(booking.PassengerPickupName)}. Drop: {ShortLocationName(booking.PassengerDropName)}. Seats: {booking.SeatsBooked}.";
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+                    await EnsureRideChatGroupAsync(ride.Id, cancellationToken);
+                    await _notificationService.CreateAsync(
+                        ride.DriverId,
+                        new Application.DTOs.Notifications.CreateNotificationRequest(
+                            "New ride booking",
+                            Truncate(notificationMessage, 1000),
+                            NotificationType.RideBooked,
+                            ride.Id,
+                            booking.Id),
+                        cancellationToken);
+                    await _notificationService.CreateAsync(
+                        passengerId,
+                        new Application.DTOs.Notifications.CreateNotificationRequest(
+                            "Ride booked successfully",
+                            Truncate(
+                                $"Your ride with {ride.Driver?.FullName ?? "Driver"} is confirmed. " +
+                                $"Pickup: {ShortLocationName(booking.PassengerPickupName)}. " +
+                                $"Drop: {ShortLocationName(booking.PassengerDropName)}. Seats: {booking.SeatsBooked}.",
+                                1000),
+                            NotificationType.BookingConfirmed,
+                            ride.Id,
+                            booking.Id),
+                        cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                    booking.Passenger = passenger;
+                    return MapBooking(booking);
+                }
+                catch
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                    throw;
+                }
+            });
         }
         catch (ApiException)
         {

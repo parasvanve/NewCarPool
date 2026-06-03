@@ -9,7 +9,11 @@ void main() {
     });
 
     test('validates password length', () {
-      expect(AuthValidators.password('short'), 'Password must be at least 8 characters');
+      expect(
+        AuthValidators.password('short'),
+        'Password must be at least 8 characters',
+      );
+
       expect(AuthValidators.password('long-password'), isNull);
     });
   });
