@@ -21,7 +21,7 @@ class AppDependencies {
     paymentService = PaymentService(apiClient);
     notificationService = NotificationService(apiClient, tokenStore);
     profileService = ProfileService(apiClient);
-    mapService = MapService(apiClient);
+    mapService = MapService();
     trackingService = TrackingService(apiClient, tokenStore);
   }
 

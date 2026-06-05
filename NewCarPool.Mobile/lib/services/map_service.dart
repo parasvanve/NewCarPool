@@ -1,14 +1,25 @@
 import 'package:flutter/foundation.dart';
 
-import '../core/network/api_client.dart';
+import 'tom_tom_reverse_geocode_service.dart';
+import 'tom_tom_route_service.dart';
+import 'tom_tom_search_service.dart';
 
 class MapService {
-  MapService(this._apiClient);
+  MapService({
+    TomTomSearchService? searchService,
+    TomTomReverseGeocodeService? reverseGeocodeService,
+    TomTomRouteService? routeService,
+  })  : _searchService = searchService ?? TomTomSearchService(),
+        _reverseGeocodeService =
+            reverseGeocodeService ?? TomTomReverseGeocodeService(),
+        _routeService = routeService ?? TomTomRouteService();
 
-  final ApiClient _apiClient;
+  final TomTomSearchService _searchService;
+  final TomTomReverseGeocodeService _reverseGeocodeService;
+  final TomTomRouteService _routeService;
   static const Duration _ttl = Duration(minutes: 5);
   final Map<String, _CacheItem<Map<String, dynamic>>> _routeCache = {};
-  final Map<String, _CacheItem<List<dynamic>>> _geocodeCache = {};
+  final Map<String, _CacheItem<List<Map<String, dynamic>>>> _geocodeCache = {};
   final Map<String, _CacheItem<String>> _reverseGeocodeCache = {};
 
   Future<Map<String, dynamic>> route({
@@ -27,13 +38,12 @@ class MapService {
     debugPrint(
       'MapService.route request from=($fromLatitude,$fromLongitude) to=($toLatitude,$toLongitude)',
     );
-    final response = await _apiClient.dio.post('/maps/route', data: {
-      'fromLatitude': fromLatitude,
-      'fromLongitude': fromLongitude,
-      'toLatitude': toLatitude,
-      'toLongitude': toLongitude,
-    });
-    final data = Map<String, dynamic>.from(response.data);
+    final data = await _routeService.route(
+      fromLatitude: fromLatitude,
+      fromLongitude: fromLongitude,
+      toLatitude: toLatitude,
+      toLongitude: toLongitude,
+    );
     debugPrint(
       'MapService.route response keys=${data.keys.toList()} '
       'distanceKm=${data['distanceKm']} etaMinutes=${data['etaMinutes']} '
@@ -43,7 +53,7 @@ class MapService {
     return data;
   }
 
-  Future<List<dynamic>> geocode(
+  Future<List<Map<String, dynamic>>> geocode(
     String query, {
     double? latitude,
     double? longitude,
@@ -55,13 +65,11 @@ class MapService {
       return cached.value;
     }
 
-    final response =
-        await _apiClient.dio.get('/maps/geocode', queryParameters: {
-      'query': query,
-      if (latitude != null) 'latitude': latitude,
-      if (longitude != null) 'longitude': longitude,
-    });
-    final data = response.data as List<dynamic>;
+    final data = await _searchService.search(
+      query,
+      latitude: latitude,
+      longitude: longitude,
+    );
     _geocodeCache[key] = _CacheItem(data, DateTime.now().add(_ttl));
     return data;
   }
@@ -77,17 +85,10 @@ class MapService {
       return cached.value;
     }
 
-    final response = await _apiClient.dio.get(
-      '/maps/reverse-geocode',
-      queryParameters: {
-        'latitude': latitude,
-        'longitude': longitude,
-      },
+    final label = await _reverseGeocodeService.reverseGeocode(
+      latitude: latitude,
+      longitude: longitude,
     );
-    final data = Map<String, dynamic>.from(response.data as Map);
-    final value =
-        (data['displayName'] ?? data['address'] ?? '').toString().trim();
-    final label = value.isEmpty ? 'Current location' : value;
     _reverseGeocodeCache[key] = _CacheItem(label, DateTime.now().add(_ttl));
     return label;
   }

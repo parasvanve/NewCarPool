@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/errors/app_exception.dart';
+import '../../core/utils/coordinate_utils.dart';
 import '../../core/utils/location_permission_helper.dart';
 import '../../core/utils/location_display_formatter.dart';
 import '../../models/ride_models.dart';
@@ -32,6 +33,8 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
   bool _submitting = false;
   GeoPoint? _pickupPoint;
   GeoPoint? _dropPoint;
+  bool _pickupLockedFromSelection = false;
+  bool _dropLockedFromSelection = false;
   _BookingMapPickMode _mapPickMode = _BookingMapPickMode.pickup;
   final Completer<gmap.GoogleMapController> _mapController = Completer();
   LatLng _mapCenter = const LatLng(22.7196, 75.8577);
@@ -46,6 +49,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
   Future<void> _initializeMapCenter() async {
     final location = await LocationPermissionHelper.currentOrFallback();
     if (!mounted) return;
+    if (_pickupLockedFromSelection) return;
     final point = LatLng(location.latitude, location.longitude);
     setState(() {
       _mapCenter = point;
@@ -61,18 +65,33 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
   }
 
   Future<void> _pickPickupFromSearch() async {
-    final selected = await _openSearchSheet(title: 'Select Boarding Point');
+    final selected = await _openSearchSheet(
+      title: 'Select Boarding Point',
+      type: 'pickup',
+    );
     if (selected == null || !mounted) return;
+    final point = LatLng(selected.latitude, selected.longitude);
     setState(() {
       _pickupPoint = selected;
-      _mapCenter = LatLng(selected.latitude, selected.longitude);
+      _pickupLockedFromSelection = true;
+      _mapCenter = point;
       _mapPickMode = _BookingMapPickMode.pickup;
     });
+    _logGeoPoint(
+      step: 'provider-state',
+      type: 'pickup',
+      point: selected,
+    );
+    _moveMap(point, 14.5, type: 'pickup');
   }
 
-  Future<GeoPoint?> _openSearchSheet({required String title}) {
+  Future<GeoPoint?> _openSearchSheet({
+    required String title,
+    required String type,
+  }) {
     final searchCtrl = TextEditingController();
     final suggestions = <Map<String, dynamic>>[];
+    Timer? searchDebounce;
     bool loading = false;
     String? error;
 
@@ -105,7 +124,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                       longitude: _mapCenter.longitude,
                     );
                 final mapped = results
-                    .take(10)
+                    .take(5)
                     .map((e) => LocationDisplayFormatter.fromSearchSuggestion(
                         Map<String, dynamic>.from(e as Map)))
                     .toList(growable: false);
@@ -153,7 +172,13 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                       labelText: 'Search location',
                       prefixIcon: Icon(Icons.search),
                     ),
-                    onChanged: search,
+                    onChanged: (value) {
+                      searchDebounce?.cancel();
+                      searchDebounce = Timer(
+                        const Duration(milliseconds: 600),
+                        () => search(value),
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
                   if (loading) const LinearProgressIndicator(),
@@ -187,18 +212,14 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             onTap: () {
+                              final selected = _geoPointFromSuggestion(
+                                item,
+                                type: type,
+                              );
+                              if (selected == null) return;
                               Navigator.pop(
                                 context,
-                                GeoPoint(
-                                  name: LocationDisplayFormatter.title(item),
-                                  address:
-                                      item['formattedAddress']?.toString() ??
-                                          item['displayName']?.toString(),
-                                  latitude:
-                                      (item['latitude'] as num).toDouble(),
-                                  longitude:
-                                      (item['longitude'] as num).toDouble(),
-                                ),
+                                selected,
                               );
                             },
                           );
@@ -211,6 +232,38 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
           },
         );
       },
+    ).whenComplete(() => searchDebounce?.cancel());
+  }
+
+  GeoPoint? _geoPointFromSuggestion(
+    Map<String, dynamic> item, {
+    required String type,
+  }) {
+    final latitude = (item['latitude'] as num?)?.toDouble();
+    final longitude = (item['longitude'] as num?)?.toDouble();
+    final name = LocationDisplayFormatter.title(item);
+    if (latitude == null ||
+        longitude == null ||
+        !CoordinateUtils.isValid(
+          latitude: latitude,
+          longitude: longitude,
+        )) {
+      _showError('Invalid location coordinates.');
+      return null;
+    }
+
+    CoordinateUtils.logSelectedSuggestion(
+      type: type,
+      name: name,
+      latitude: latitude,
+      longitude: longitude,
+    );
+    return GeoPoint(
+      name: name,
+      address: item['formattedAddress']?.toString() ??
+          item['displayName']?.toString(),
+      latitude: latitude,
+      longitude: longitude,
     );
   }
 
@@ -228,6 +281,14 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
   }
 
   Future<void> _setCurrentLocationPickup(LocationPoint location) async {
+    if (!CoordinateUtils.isValid(
+      latitude: location.latitude,
+      longitude: location.longitude,
+    )) {
+      _showError('Invalid location coordinates.');
+      return;
+    }
+
     final point = LatLng(location.latitude, location.longitude);
     String address = 'Current location';
     try {
@@ -247,16 +308,32 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
         latitude: location.latitude,
         longitude: location.longitude,
       );
+      _pickupLockedFromSelection = true;
       _mapCenter = point;
       _mapPickMode = _BookingMapPickMode.pickup;
       _canShowMyLocation = location.hasPermission;
     });
-    _moveMap(point, 14.5);
+    _logGeoPoint(
+      step: 'provider-state',
+      type: 'current',
+      point: _pickupPoint!,
+    );
+    _moveMap(point, 14.5, type: 'current');
   }
 
-  void _moveMap(LatLng point, double zoom) {
+  void _moveMap(
+    LatLng point,
+    double zoom, {
+    String? type,
+  }) {
     if (!_mapController.isCompleted) return;
     _mapController.future.then((controller) {
+      CoordinateUtils.logCameraPoint(
+        type: type ?? _mapPickMode.name,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        zoom: zoom,
+      );
       controller.animateCamera(
         gmap.CameraUpdate.newLatLngZoom(
           gmap.LatLng(point.latitude, point.longitude),
@@ -274,6 +351,28 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
   }
 
   Future<void> _setPointFromMap(LatLng point) async {
+    if (!CoordinateUtils.isValid(
+      latitude: point.latitude,
+      longitude: point.longitude,
+    )) {
+      _showError('Invalid location coordinates.');
+      return;
+    }
+
+    if (_mapPickMode == _BookingMapPickMode.pickup &&
+        _pickupLockedFromSelection) {
+      _showError(
+        'Pickup is locked to the selected location. Search again to edit it.',
+      );
+      return;
+    }
+    if (_mapPickMode == _BookingMapPickMode.drop && _dropLockedFromSelection) {
+      _showError(
+        'Drop is locked to the selected location. Search again to edit it.',
+      );
+      return;
+    }
+
     final suggestion = await _reversePoint(point);
     final geo = GeoPoint(
       name: LocationDisplayFormatter.title(suggestion),
@@ -283,22 +382,32 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
       longitude: point.longitude,
     );
     if (!mounted) return;
+    if (_mapPickMode == _BookingMapPickMode.pickup &&
+        _dropPoint != null &&
+        _isSame(geo, _dropPoint!)) {
+      _showError('Pickup and drop cannot be same point.');
+      return;
+    }
+    if (_mapPickMode == _BookingMapPickMode.drop &&
+        _pickupPoint != null &&
+        _isSame(geo, _pickupPoint!)) {
+      _showError('Pickup and drop cannot be same point.');
+      return;
+    }
+
     setState(() {
       _mapCenter = point;
       if (_mapPickMode == _BookingMapPickMode.pickup) {
-        if (_dropPoint != null && _isSame(geo, _dropPoint!)) {
-          _showError('Pickup and drop cannot be same point.');
-          return;
-        }
         _pickupPoint = geo;
       } else {
-        if (_pickupPoint != null && _isSame(geo, _pickupPoint!)) {
-          _showError('Pickup and drop cannot be same point.');
-          return;
-        }
         _dropPoint = geo;
       }
     });
+    _logGeoPoint(
+      step: 'provider-state',
+      type: _mapPickMode.name,
+      point: geo,
+    );
   }
 
   Future<Map<String, dynamic>> _reversePoint(LatLng point) async {
@@ -320,6 +429,48 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
   bool _isSame(GeoPoint a, GeoPoint b) {
     return (a.latitude - b.latitude).abs() < 0.0001 &&
         (a.longitude - b.longitude).abs() < 0.0001;
+  }
+
+  void _logGeoPoint({
+    required String step,
+    required String type,
+    required GeoPoint point,
+  }) {
+    CoordinateUtils.logStatePoint(
+      step: step,
+      type: type,
+      name: point.name,
+      latitude: point.latitude,
+      longitude: point.longitude,
+    );
+    CoordinateUtils.logMarkerPoint(
+      type: type,
+      latitude: point.latitude,
+      longitude: point.longitude,
+    );
+  }
+
+  gmap.Marker _marker({
+    required String id,
+    required String type,
+    required double latitude,
+    required double longitude,
+    required double hue,
+    int zIndexInt = 1,
+    gmap.InfoWindow infoWindow = const gmap.InfoWindow(),
+  }) {
+    CoordinateUtils.logMarkerPoint(
+      type: type,
+      latitude: latitude,
+      longitude: longitude,
+    );
+    return gmap.Marker(
+      markerId: gmap.MarkerId(id),
+      position: gmap.LatLng(latitude, longitude),
+      icon: gmap.BitmapDescriptor.defaultMarkerWithHue(hue),
+      zIndexInt: zIndexInt,
+      infoWindow: infoWindow,
+    );
   }
 
   @override
@@ -455,8 +606,9 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                           zoom: 12.5,
                         ),
                         onMapCreated: (c) {
-                          if (!_mapController.isCompleted)
+                          if (!_mapController.isCompleted) {
                             _mapController.complete(c);
+                          }
                         },
                         onTap: (p) =>
                             _setPointFromMap(LatLng(p.latitude, p.longitude)),
@@ -464,52 +616,55 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                         myLocationButtonEnabled: false,
                         zoomControlsEnabled: true,
                         markers: {
-                          gmap.Marker(
-                            markerId: const gmap.MarkerId('ride-origin'),
-                            position: gmap.LatLng(
-                                ride.origin.latitude, ride.origin.longitude),
-                            icon: gmap.BitmapDescriptor.defaultMarkerWithHue(
-                                gmap.BitmapDescriptor.hueGreen),
+                          _marker(
+                            id: 'ride-origin',
+                            type: 'pickup',
+                            latitude: ride.origin.latitude,
+                            longitude: ride.origin.longitude,
+                            hue: gmap.BitmapDescriptor.hueGreen,
                           ),
-                          gmap.Marker(
-                            markerId: const gmap.MarkerId('ride-destination'),
-                            position: gmap.LatLng(ride.destination.latitude,
-                                ride.destination.longitude),
-                            icon: gmap.BitmapDescriptor.defaultMarkerWithHue(
-                                gmap.BitmapDescriptor.hueRed),
+                          _marker(
+                            id: 'ride-destination',
+                            type: 'destination',
+                            latitude: ride.destination.latitude,
+                            longitude: ride.destination.longitude,
+                            hue: gmap.BitmapDescriptor.hueRed,
                           ),
                           if (_pickupPoint != null)
-                            gmap.Marker(
-                              markerId: const gmap.MarkerId('selected-pickup'),
-                              position: gmap.LatLng(_pickupPoint!.latitude,
-                                  _pickupPoint!.longitude),
-                              icon: gmap.BitmapDescriptor.defaultMarkerWithHue(
-                                  gmap.BitmapDescriptor.hueGreen),
+                            _marker(
+                              id: 'selected-pickup',
+                              type: 'pickup',
+                              latitude: _pickupPoint!.latitude,
+                              longitude: _pickupPoint!.longitude,
+                              hue: gmap.BitmapDescriptor.hueGreen,
                               zIndexInt:
                                   _mapPickMode == _BookingMapPickMode.pickup
                                       ? 3
                                       : 1,
                             ),
                           if (_dropPoint != null)
-                            gmap.Marker(
-                              markerId: const gmap.MarkerId('selected-drop'),
-                              position: gmap.LatLng(
-                                  _dropPoint!.latitude, _dropPoint!.longitude),
-                              icon: gmap.BitmapDescriptor.defaultMarkerWithHue(
-                                  gmap.BitmapDescriptor.hueRed),
+                            _marker(
+                              id: 'selected-drop',
+                              type: 'drop',
+                              latitude: _dropPoint!.latitude,
+                              longitude: _dropPoint!.longitude,
+                              hue: gmap.BitmapDescriptor.hueBlue,
                               zIndexInt:
                                   _mapPickMode == _BookingMapPickMode.drop
                                       ? 3
                                       : 1,
                             ),
                           ...ride.intermediateStops.asMap().entries.map(
-                                (e) => gmap.Marker(
-                                  markerId: gmap.MarkerId('ride-stop-${e.key}'),
-                                  position: gmap.LatLng(
-                                      e.value.latitude, e.value.longitude),
-                                  icon: gmap.BitmapDescriptor
-                                      .defaultMarkerWithHue(
-                                          gmap.BitmapDescriptor.hueAzure),
+                                (e) => _marker(
+                                  id: 'ride-stop-${e.key}',
+                                  type: 'stop-${e.key + 1}',
+                                  latitude: e.value.latitude,
+                                  longitude: e.value.longitude,
+                                  hue: gmap.BitmapDescriptor.hueBlue,
+                                  infoWindow: gmap.InfoWindow(
+                                    title: 'Stop ${e.key + 1}',
+                                    snippet: e.value.name,
+                                  ),
                                 ),
                               ),
                         },
@@ -594,7 +749,21 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                             label: Text(p.name),
                             selected: _pickupPoint?.name == p.name &&
                                 _pickupPoint?.latitude == p.latitude,
-                            onSelected: (_) => setState(() => _pickupPoint = p),
+                            onSelected: (_) {
+                              final point = LatLng(p.latitude, p.longitude);
+                              setState(() {
+                                _pickupPoint = p;
+                                _pickupLockedFromSelection = false;
+                                _mapCenter = point;
+                                _mapPickMode = _BookingMapPickMode.pickup;
+                              });
+                              _logGeoPoint(
+                                step: 'provider-state',
+                                type: 'pickup',
+                                point: p,
+                              );
+                              _moveMap(point, 14.5, type: 'pickup');
+                            },
                           ),
                         )
                         .toList(),
@@ -635,9 +804,20 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                       );
                       setState(() {
                         _dropPoint = point;
+                        _dropLockedFromSelection = false;
                         _mapCenter = LatLng(point.latitude, point.longitude);
                         _mapPickMode = _BookingMapPickMode.drop;
                       });
+                      _logGeoPoint(
+                        step: 'provider-state',
+                        type: 'drop',
+                        point: point,
+                      );
+                      _moveMap(
+                        LatLng(point.latitude, point.longitude),
+                        14.5,
+                        type: 'drop',
+                      );
                     },
                   ),
                   const SizedBox(height: 8),
@@ -707,6 +887,9 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                     }
 
                     final bookingProvider = context.read<BookingProvider>();
+                    final rideProvider = context.read<RideProvider>();
+                    final notificationProvider =
+                        context.read<NotificationProvider>();
                     final messenger = ScaffoldMessenger.of(context);
                     final navigator = Navigator.of(context);
                     setState(() => _submitting = true);
@@ -718,12 +901,10 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                         drop: _dropPoint,
                       );
                       if (!mounted) return;
-                      await context.read<RideProvider>().loadUpcomingActive();
-                      await context.read<BookingProvider>().loadHistory();
-                      await context.read<NotificationProvider>().loadMine();
-                      await context
-                          .read<NotificationProvider>()
-                          .loadUnreadCount();
+                      await rideProvider.loadUpcomingActive();
+                      await bookingProvider.loadHistory();
+                      await notificationProvider.loadMine();
+                      await notificationProvider.loadUnreadCount();
                       messenger.showSnackBar(
                         const SnackBar(
                             content: Text('Ride booked successfully')),
