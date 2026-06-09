@@ -12,7 +12,7 @@ class AppConfig {
 
   static const tomTomApiKey = String.fromEnvironment(
     'TOMTOM_API_KEY',
-    defaultValue: '',
+    defaultValue: '2psqCAXhAaU3y4pxUtrwOdTgCyiRI9Ll',
   );
 
   static const nominatimBaseUrl = 'https://nominatim.openstreetmap.org';
