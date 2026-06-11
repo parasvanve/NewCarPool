@@ -21,6 +21,7 @@ public sealed class RideOfferConfiguration : IEntityTypeConfiguration<RideOffer>
         builder.Property(x => x.VehicleNumber).HasMaxLength(30);
         builder.Property(x => x.RoutePolyline).HasMaxLength(8000);
         builder.Property(x => x.DistanceKm).HasPrecision(9, 2);
+        builder.HasIndex(x => new { x.Id, x.LastDriverLocationAtUtc });
         builder.HasIndex(x => new { x.DepartureTimeUtc, x.Status });
         builder.HasOne(x => x.Driver)
             .WithMany(x => x.OfferedRides)

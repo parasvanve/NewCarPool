@@ -27,7 +27,8 @@ class RideProvider extends ChangeNotifier {
   int _lastSeats = 1;
   DateTime? _lastDepartureDateUtc;
 
-  Future<void> search(GeoPoint origin, GeoPoint destination, int seats, {DateTime? departureDateUtc}) async {
+  Future<void> search(GeoPoint origin, GeoPoint destination, int seats,
+      {DateTime? departureDateUtc}) async {
     isLoading = true;
     errorMessage = null;
     _lastOrigin = origin;
@@ -124,9 +125,10 @@ class RideProvider extends ChangeNotifier {
     return _rideService.participants(rideOfferId);
   }
 
-  Future<void> startRide(String rideOfferId) async {
+  Future<RideOffer> startRide(String rideOfferId) async {
     final updated = await _rideService.startRide(rideOfferId);
     _upsertRide(updated);
+    return updated;
   }
 
   Future<void> completeRide(String rideOfferId) async {
@@ -211,7 +213,8 @@ class RideProvider extends ChangeNotifier {
     _realtimeConnection = null;
   }
 
-  void startUpcomingAutoRefresh({Duration interval = const Duration(seconds: 15)}) {
+  void startUpcomingAutoRefresh(
+      {Duration interval = const Duration(seconds: 15)}) {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(interval, (_) async {
       if (_upcomingRequestInFlight) return;

@@ -24,6 +24,11 @@ public sealed class RideOffer
     public string? RoutePolyline { get; set; }
     public double? DistanceKm { get; set; }
     public int? EtaMinutes { get; set; }
+    public double? LastDriverLatitude { get; set; }
+    public double? LastDriverLongitude { get; set; }
+    public double? LastDriverHeading { get; set; }
+    public double? LastDriverSpeedKph { get; set; }
+    public DateTime? LastDriverLocationAtUtc { get; set; }
     public RideStatus Status { get; set; } = RideStatus.Open;
     public DateTime? StartedAtUtc { get; set; }
     public DateTime? CompletedAtUtc { get; set; }

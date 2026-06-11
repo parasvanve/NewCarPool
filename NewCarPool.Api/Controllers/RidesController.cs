@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using NewCarPool.Api.Extensions;
+using NewCarPool.Api.Hubs;
 using NewCarPool.Application.Common;
 using NewCarPool.Application.DTOs.Rides;
 using NewCarPool.Application.Interfaces.Services;
@@ -17,12 +18,18 @@ public sealed class RidesController : ControllerBase
     private readonly IRideService _rideService;
     private readonly IBookingService _bookingService;
     private readonly IHubContext<AppRealtimeHub> _hubContext;
+    private readonly IHubContext<TrackingHub> _trackingHubContext;
 
-    public RidesController(IRideService rideService, IBookingService bookingService, IHubContext<AppRealtimeHub> hubContext)
+    public RidesController(
+        IRideService rideService,
+        IBookingService bookingService,
+        IHubContext<AppRealtimeHub> hubContext,
+        IHubContext<TrackingHub> trackingHubContext)
     {
         _rideService = rideService;
         _bookingService = bookingService;
         _hubContext = hubContext;
+        _trackingHubContext = trackingHubContext;
     }
 
     [HttpPost("offer")]
@@ -103,19 +110,37 @@ public sealed class RidesController : ControllerBase
     }
 
     [HttpPost("{rideOfferId:guid}/start")]
-    public async Task<ActionResult<RideOfferDto>> Start(Guid rideOfferId, CancellationToken cancellationToken) =>
-        Ok(await _rideService.StartRideAsync(User.GetUserId(), rideOfferId, cancellationToken));
+    public async Task<ActionResult<RideOfferDto>> Start(Guid rideOfferId, CancellationToken cancellationToken)
+    {
+        var ride = await _rideService.StartRideAsync(User.GetUserId(), rideOfferId, cancellationToken);
+        await _trackingHubContext.Clients
+            .Group(TrackingHub.RideGroupName(rideOfferId.ToString()))
+            .SendAsync("TrackingStarted", new { rideId = rideOfferId }, cancellationToken);
+        return Ok(ride);
+    }
 
     [HttpPost("{rideOfferId:guid}/complete")]
-    public async Task<ActionResult<RideOfferDto>> Complete(Guid rideOfferId, CancellationToken cancellationToken) =>
-        Ok(await _rideService.CompleteRideAsync(User.GetUserId(), rideOfferId, cancellationToken));
+    public async Task<ActionResult<RideOfferDto>> Complete(Guid rideOfferId, CancellationToken cancellationToken)
+    {
+        var ride = await _rideService.CompleteRideAsync(User.GetUserId(), rideOfferId, cancellationToken);
+        await _trackingHubContext.Clients
+            .Group(TrackingHub.RideGroupName(rideOfferId.ToString()))
+            .SendAsync("TrackingStopped", new { rideId = rideOfferId, status = ride.Status.ToString() }, cancellationToken);
+        return Ok(ride);
+    }
 
     [HttpPost("{rideOfferId:guid}/cancel")]
     public async Task<ActionResult<RideOfferDto>> Cancel(
         Guid rideOfferId,
         [FromBody] CancelActionRequest? request,
-        CancellationToken cancellationToken) =>
-        Ok(await _rideService.CancelRideAsync(User.GetUserId(), rideOfferId, request?.Reason, cancellationToken));
+        CancellationToken cancellationToken)
+    {
+        var ride = await _rideService.CancelRideAsync(User.GetUserId(), rideOfferId, request?.Reason, cancellationToken);
+        await _trackingHubContext.Clients
+            .Group(TrackingHub.RideGroupName(rideOfferId.ToString()))
+            .SendAsync("TrackingStopped", new { rideId = rideOfferId, status = ride.Status.ToString() }, cancellationToken);
+        return Ok(ride);
+    }
 
     [HttpPost("bookings/{bookingId:guid}/cancel")]
     public async Task<ActionResult<RideBookingDto>> CancelBooking(

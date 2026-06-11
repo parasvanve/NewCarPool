@@ -1,5 +1,4 @@
-﻿using System;
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -11,50 +10,53 @@ namespace NewCarPool.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "CancellationReason",
-                table: "RideOffers",
-                type: "nvarchar(1000)",
-                maxLength: 1000,
-                nullable: true);
+            migrationBuilder.Sql(@"
+IF COL_LENGTH('RideOffers', 'CancellationReason') IS NULL
+BEGIN
+    ALTER TABLE [RideOffers] ADD [CancellationReason] nvarchar(1000) NULL;
+END
 
-            migrationBuilder.AddColumn<DateTime>(
-                name: "CancelledAtUtc",
-                table: "RideOffers",
-                type: "datetime2",
-                nullable: true);
+IF COL_LENGTH('RideOffers', 'CancelledAtUtc') IS NULL
+BEGIN
+    ALTER TABLE [RideOffers] ADD [CancelledAtUtc] datetime2 NULL;
+END
 
-            migrationBuilder.AddColumn<DateTime>(
-                name: "CompletedAtUtc",
-                table: "RideOffers",
-                type: "datetime2",
-                nullable: true);
+IF COL_LENGTH('RideOffers', 'CompletedAtUtc') IS NULL
+BEGIN
+    ALTER TABLE [RideOffers] ADD [CompletedAtUtc] datetime2 NULL;
+END
 
-            migrationBuilder.AddColumn<DateTime>(
-                name: "StartedAtUtc",
-                table: "RideOffers",
-                type: "datetime2",
-                nullable: true);
+IF COL_LENGTH('RideOffers', 'StartedAtUtc') IS NULL
+BEGIN
+    ALTER TABLE [RideOffers] ADD [StartedAtUtc] datetime2 NULL;
+END
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "CancellationReason",
-                table: "RideOffers");
+            migrationBuilder.Sql(@"
+IF COL_LENGTH('RideOffers', 'CancellationReason') IS NOT NULL
+BEGIN
+    ALTER TABLE [RideOffers] DROP COLUMN [CancellationReason];
+END
 
-            migrationBuilder.DropColumn(
-                name: "CancelledAtUtc",
-                table: "RideOffers");
+IF COL_LENGTH('RideOffers', 'CancelledAtUtc') IS NOT NULL
+BEGIN
+    ALTER TABLE [RideOffers] DROP COLUMN [CancelledAtUtc];
+END
 
-            migrationBuilder.DropColumn(
-                name: "CompletedAtUtc",
-                table: "RideOffers");
+IF COL_LENGTH('RideOffers', 'CompletedAtUtc') IS NOT NULL
+BEGIN
+    ALTER TABLE [RideOffers] DROP COLUMN [CompletedAtUtc];
+END
 
-            migrationBuilder.DropColumn(
-                name: "StartedAtUtc",
-                table: "RideOffers");
+IF COL_LENGTH('RideOffers', 'StartedAtUtc') IS NOT NULL
+BEGIN
+    ALTER TABLE [RideOffers] DROP COLUMN [StartedAtUtc];
+END
+");
         }
     }
 }

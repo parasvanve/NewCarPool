@@ -37,6 +37,7 @@ public sealed class TrackingService : ITrackingService
             throw new ApiException("Tracking is not available for this ride status.");
         }
 
+        var createdAtUtc = DateTime.UtcNow;
         var locationUpdate = new RideLocationUpdate
         {
             Id = Guid.NewGuid(),
@@ -45,8 +46,15 @@ public sealed class TrackingService : ITrackingService
             Latitude = request.Latitude,
             Longitude = request.Longitude,
             Heading = request.Heading,
-            SpeedKph = request.SpeedKph
+            SpeedKph = request.SpeedKph,
+            CreatedAtUtc = createdAtUtc
         };
+        ride.LastDriverLatitude = request.Latitude;
+        ride.LastDriverLongitude = request.Longitude;
+        ride.LastDriverHeading = request.Heading;
+        ride.LastDriverSpeedKph = request.SpeedKph;
+        ride.LastDriverLocationAtUtc = createdAtUtc;
+        ride.UpdatedAtUtc = createdAtUtc;
 
         await _rides.AddLocationUpdateAsync(locationUpdate, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -66,22 +74,7 @@ public sealed class TrackingService : ITrackingService
         var ride = await _rides.GetRideByIdAsync(rideOfferId, cancellationToken)
             ?? throw new ApiException("Ride not found.", 404);
 
-        if (ride.Status != RideStatus.Started)
-        {
-            throw new ApiException("Tracking is not available for this ride status.");
-        }
-
-        var isDriver = ride.DriverId == userId;
-        var isBookedPassenger = await _dbContext.RideBookings
-            .AsNoTracking()
-            .AnyAsync(
-                x => x.RideOfferId == rideOfferId && x.PassengerId == userId && x.Status == BookingStatus.Confirmed,
-                cancellationToken);
-
-        if (!isDriver && !isBookedPassenger)
-        {
-            throw new ApiException("You are not allowed to access this ride location.", 403);
-        }
+        await EnsureCanAccessTrackingAsync(userId, rideOfferId, cancellationToken);
 
         var latest = await _dbContext.RideLocationUpdates
             .AsNoTracking()
@@ -102,5 +95,38 @@ public sealed class TrackingService : ITrackingService
             latest.Heading,
             latest.SpeedKph,
             latest.CreatedAtUtc);
+    }
+
+    public async Task EnsureCanAccessTrackingAsync(Guid userId, Guid rideOfferId, CancellationToken cancellationToken)
+    {
+        var ride = await _dbContext.RideOffers
+            .AsNoTracking()
+            .Where(x => x.Id == rideOfferId)
+            .Select(x => new { x.Id, x.DriverId, x.Status })
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new ApiException("Ride not found.", 404);
+
+        if (ride.Status != RideStatus.Started)
+        {
+            throw new ApiException("Tracking is not available for this ride status.");
+        }
+
+        if (ride.DriverId == userId)
+        {
+            return;
+        }
+
+        var isBookedPassenger = await _dbContext.RideBookings
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.RideOfferId == rideOfferId
+                     && x.PassengerId == userId
+                     && x.Status == BookingStatus.Confirmed,
+                cancellationToken);
+
+        if (!isBookedPassenger)
+        {
+            throw new ApiException("You are not allowed to access this ride location.", 403);
+        }
     }
 }

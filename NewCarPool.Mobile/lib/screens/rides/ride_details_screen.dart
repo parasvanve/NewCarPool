@@ -3,7 +3,6 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart' as gmap;
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
@@ -37,7 +36,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   gmap.BitmapDescriptor? _pickupMarkerIcon;
   gmap.BitmapDescriptor? _stopMarkerIcon;
   gmap.BitmapDescriptor? _destinationMarkerIcon;
-  Timer? _driverTimer;
+  gmap.BitmapDescriptor? _driverMarkerIcon;
   Timer? _passengerPollTimer;
   gmap.LatLng _fallbackMapCenter = const gmap.LatLng(
     LocationPermissionHelper.indoreLatitude,
@@ -86,11 +85,13 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
         const Color(0xFFDC2626),
         pixelRatio: pixelRatio,
       );
+      final driver = await _buildDriverMarkerIconBytes(pixelRatio: pixelRatio);
       if (!mounted) return;
       setState(() {
         _pickupMarkerIcon = gmap.BitmapDescriptor.bytes(pickup);
         _stopMarkerIcon = gmap.BitmapDescriptor.bytes(stop);
         _destinationMarkerIcon = gmap.BitmapDescriptor.bytes(destination);
+        _driverMarkerIcon = gmap.BitmapDescriptor.bytes(driver);
       });
     } catch (_) {
       // Keep hue-based fallback markers if custom icon generation fails.
@@ -135,11 +136,54 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     return bytes!.buffer.asUint8List();
   }
 
+  Future<Uint8List> _buildDriverMarkerIconBytes({
+    required double pixelRatio,
+  }) async {
+    final scale = pixelRatio.clamp(1.0, 3.0);
+    final width = 58.0 * scale;
+    final height = 58.0 * scale;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder, Rect.fromLTWH(0, 0, width, height));
+    final center = Offset(width / 2, height / 2);
+    final shadow = Paint()..color = Colors.black.withValues(alpha: 0.22);
+    final fill = Paint()..color = const Color(0xFF2563EB);
+    final glass = Paint()..color = Colors.white.withValues(alpha: 0.92);
+    final wheel = Paint()..color = const Color(0xFF0F172A);
+
+    canvas.drawCircle(center + Offset(0, 2 * scale), 22 * scale, shadow);
+    canvas.drawCircle(center, 22 * scale, fill);
+
+    final body = RRect.fromRectAndRadius(
+      Rect.fromCenter(center: center, width: 30 * scale, height: 22 * scale),
+      Radius.circular(7 * scale),
+    );
+    canvas.drawRRect(body, glass);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: center.translate(0, -3 * scale),
+          width: 18 * scale,
+          height: 8 * scale,
+        ),
+        Radius.circular(4 * scale),
+      ),
+      fill,
+    );
+    canvas.drawCircle(
+        center.translate(-11 * scale, 9 * scale), 3 * scale, wheel);
+    canvas.drawCircle(
+        center.translate(11 * scale, 9 * scale), 3 * scale, wheel);
+
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(width.ceil(), height.ceil());
+    final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+    return bytes!.buffer.asUint8List();
+  }
+
   @override
   void dispose() {
-    _driverTimer?.cancel();
     _passengerPollTimer?.cancel();
-    context.read<TrackingService>().disconnect();
+    context.read<TrackingService>().stopAll();
     super.dispose();
   }
 
@@ -178,11 +222,13 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   }
 
   Future<void> _syncTracking(RideOffer ride) async {
-    _driverTimer?.cancel();
     _passengerPollTimer?.cancel();
-    await context.read<TrackingService>().disconnect();
+    await context.read<TrackingService>().stopAll();
     if (ride.status != 3) {
-      setState(() => _trackingMessage = null);
+      setState(() {
+        _trackingMessage = null;
+        _driverLivePoint = null;
+      });
       return;
     }
 
@@ -215,37 +261,29 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   }
 
   Future<void> _startDriverTracking(RideOffer ride) async {
-    final permission = await LocationPermissionHelper.request();
-    if (!permission.isGranted) {
-      if (!mounted) return;
-      setState(() => _trackingMessage = permission.message);
-      return;
-    }
-
     if (mounted) {
       setState(() => _trackingMessage =
           'Your live location is being shared with passengers.');
     }
 
-    Future<void> tick() async {
-      try {
-        final pos = await Geolocator.getCurrentPosition();
-        if (!mounted) return;
-        final next = gmap.LatLng(pos.latitude, pos.longitude);
+    final started =
+        await context.read<TrackingService>().startDriverLocationSharing(
+      ride.id,
+      onPublished: (payload) async {
+        final lat = (payload['latitude'] as num?)?.toDouble();
+        final lng = (payload['longitude'] as num?)?.toDouble();
+        if (!mounted || lat == null || lng == null) return;
+        final next = gmap.LatLng(lat, lng);
         setState(() => _driverLivePoint = next);
-        await context.read<TrackingService>().publishLocation(
-              rideOfferId: ride.id,
-              latitude: pos.latitude,
-              longitude: pos.longitude,
-              heading: pos.heading.isFinite ? pos.heading : null,
-              speedKph: pos.speed.isFinite ? pos.speed * 3.6 : null,
-            );
         await _fitCamera();
-      } catch (_) {}
-    }
+      },
+    );
 
-    await tick();
-    _driverTimer = Timer.periodic(const Duration(seconds: 8), (_) => tick());
+    if (!mounted) return;
+    if (!started) {
+      setState(() => _trackingMessage =
+          LocationPermissionHelper.liveTrackingRequiredMessage);
+    }
   }
 
   Future<void> _startPassengerTracking(RideOffer ride) async {
@@ -271,16 +309,24 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     _passengerPollTimer =
         Timer.periodic(const Duration(seconds: 10), (_) => fetchLatest());
     try {
-      await context.read<TrackingService>().connect(ride.id, (payload) async {
-        final lat = (payload['latitude'] as num?)?.toDouble();
-        final lng = (payload['longitude'] as num?)?.toDouble();
-        if (!mounted || lat == null || lng == null) return;
-        setState(() {
-          _driverLivePoint = gmap.LatLng(lat, lng);
-          _trackingMessage = 'Driver is on the way';
-        });
-        await _fitCamera();
-      });
+      await context.read<TrackingService>().connect(
+        ride.id,
+        (payload) async {
+          final lat = (payload['latitude'] as num?)?.toDouble();
+          final lng = (payload['longitude'] as num?)?.toDouble();
+          if (!mounted || lat == null || lng == null) return;
+          setState(() {
+            _driverLivePoint = gmap.LatLng(lat, lng);
+            _trackingMessage = 'Driver is on the way';
+          });
+          await _fitCamera();
+        },
+        onTrackingStopped: () {
+          if (!mounted) return;
+          _passengerPollTimer?.cancel();
+          setState(() => _trackingMessage = 'Tracking stopped');
+        },
+      );
     } catch (_) {}
   }
 
@@ -291,6 +337,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     if (ride == null) return;
 
     final pts = _sanitizeRoutePoints([
+      if (_driverLivePoint != null) _driverLivePoint!,
       ..._fallbackRoutePoints(ride),
     ]);
     if (pts.length < 2) return;
@@ -322,6 +369,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     final updated = await context.read<RideService>().completeRide(ride.id);
     if (!mounted) return;
     setState(() => _ride = updated);
+    await context.read<TrackingService>().stopAll();
     await _syncTracking(updated);
     if (mounted) {
       ScaffoldMessenger.of(context)
@@ -567,6 +615,19 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
 
   Set<gmap.Marker> _buildMarkers(RideOffer ride) {
     return {
+      if (_driverLivePoint != null)
+        gmap.Marker(
+          markerId: const gmap.MarkerId('driver-live'),
+          position: _driverLivePoint!,
+          icon: _driverMarkerIcon ??
+              gmap.BitmapDescriptor.defaultMarkerWithHue(
+                gmap.BitmapDescriptor.hueAzure,
+              ),
+          infoWindow: const gmap.InfoWindow(
+            title: 'Driver',
+            snippet: 'Live location',
+          ),
+        ),
       gmap.Marker(
         markerId: const gmap.MarkerId('origin'),
         position: gmap.LatLng(ride.origin.latitude, ride.origin.longitude),
@@ -673,118 +734,141 @@ class _MapCard extends StatelessWidget {
         (originIsValid
             ? gmap.LatLng(ride.origin.latitude, ride.origin.longitude)
             : fallbackCenter);
-    return Card(
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        children: [
-          gmap.GoogleMap(
-            initialCameraPosition:
-                gmap.CameraPosition(target: center, zoom: 12),
-            onMapCreated: (c) {
-              if (!mapController.isCompleted) mapController.complete(c);
-            },
-            onCameraMoveStarted: onUserMove,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            markers: markers,
-            polylines: const {},
-          ),
-          if (isStarted)
-            Positioned(
-              left: 14,
-              top: 14,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                      colors: [Color(0xFF6D28D9), Color(0xFF2563EB)]),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  'Ride Started\n${trackingMessage == null || trackingMessage!.isEmpty ? 'Driver is on the way' : trackingMessage!}',
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ),
-          Positioned(
-            right: 14,
-            top: 14,
-            child: FilledButton.tonalIcon(
-              onPressed: () {},
-              icon: const Icon(Icons.share_outlined),
-              label: const Text('Share Live Trip'),
-            ),
-          ),
-          Positioned(
-            right: 14,
-            bottom: 14,
-            child: Column(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.hasBoundedWidth && constraints.maxWidth > 0
+            ? constraints.maxWidth
+            : MediaQuery.of(context).size.width;
+        final height = constraints.hasBoundedHeight && constraints.maxHeight > 0
+            ? constraints.maxHeight
+            : 360.0;
+        return SizedBox(
+          width: width,
+          height: height,
+          child: Card(
+            margin: EdgeInsets.zero,
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+            clipBehavior: Clip.antiAlias,
+            child: Stack(
+              fit: StackFit.expand,
               children: [
-                _MapControlButton(icon: Icons.my_location, onTap: onMyLocation),
-                const SizedBox(height: 8),
-                _MapControlButton(
-                  icon: Icons.add,
-                  onTap: () async {
-                    if (!mapController.isCompleted) return;
-                    final c = await mapController.future;
-                    await c.animateCamera(gmap.CameraUpdate.zoomIn());
-                  },
+                SizedBox.expand(
+                  child: gmap.GoogleMap(
+                    initialCameraPosition:
+                        gmap.CameraPosition(target: center, zoom: 12),
+                    onMapCreated: (c) {
+                      if (!mapController.isCompleted) mapController.complete(c);
+                    },
+                    onCameraMoveStarted: onUserMove,
+                    myLocationButtonEnabled: false,
+                    zoomControlsEnabled: false,
+                    mapToolbarEnabled: false,
+                    markers: markers,
+                    polylines: const {},
+                  ),
                 ),
-                const SizedBox(height: 8),
-                _MapControlButton(
-                  icon: Icons.remove,
-                  onTap: () async {
-                    if (!mapController.isCompleted) return;
-                    final c = await mapController.future;
-                    await c.animateCamera(gmap.CameraUpdate.zoomOut());
-                  },
+                if (isStarted)
+                  Positioned(
+                    left: 14,
+                    top: 14,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                            colors: [Color(0xFF6D28D9), Color(0xFF2563EB)]),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Text(
+                        'Ride Started\n${trackingMessage == null || trackingMessage!.isEmpty ? 'Driver is on the way' : trackingMessage!}',
+                        style: const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                Positioned(
+                  right: 14,
+                  top: 14,
+                  child: FilledButton.tonalIcon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.share_outlined),
+                    label: const Text('Share Live Trip'),
+                  ),
                 ),
+                Positioned(
+                  right: 14,
+                  bottom: 14,
+                  child: Column(
+                    children: [
+                      _MapControlButton(
+                          icon: Icons.my_location, onTap: onMyLocation),
+                      const SizedBox(height: 8),
+                      _MapControlButton(
+                        icon: Icons.add,
+                        onTap: () async {
+                          if (!mapController.isCompleted) return;
+                          final c = await mapController.future;
+                          await c.animateCamera(gmap.CameraUpdate.zoomIn());
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      _MapControlButton(
+                        icon: Icons.remove,
+                        onTap: () async {
+                          if (!mapController.isCompleted) return;
+                          final c = await mapController.future;
+                          await c.animateCamera(gmap.CameraUpdate.zoomOut());
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  left: 14,
+                  bottom: 14,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: const [
+                          BoxShadow(
+                              color: Color(0x22000000),
+                              blurRadius: 8,
+                              offset: Offset(0, 3)),
+                        ]),
+                    child: Text('ETA $etaMin min'),
+                  ),
+                ),
+                if (driverLivePoint != null)
+                  Positioned(
+                    left: 14,
+                    bottom: 56,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      constraints: BoxConstraints(
+                        maxWidth: (width - 28).clamp(160.0, 260.0),
+                      ),
+                      decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: const [
+                            BoxShadow(
+                                color: Color(0x22000000),
+                                blurRadius: 8,
+                                offset: Offset(0, 3)),
+                          ]),
+                      child: Text(
+                          'Driver on the way\n${distanceKm.toStringAsFixed(1)} km'),
+                    ),
+                  ),
               ],
             ),
           ),
-          Positioned(
-            left: 14,
-            bottom: 14,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: const [
-                    BoxShadow(
-                        color: Color(0x22000000),
-                        blurRadius: 8,
-                        offset: Offset(0, 3)),
-                  ]),
-              child: Text('ETA $etaMin min'),
-            ),
-          ),
-          if (driverLivePoint != null)
-            Positioned(
-              left: 180,
-              top: 180,
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: const [
-                      BoxShadow(
-                          color: Color(0x22000000),
-                          blurRadius: 8,
-                          offset: Offset(0, 3)),
-                    ]),
-                child: Text(
-                    'Driver on the way\n${distanceKm.toStringAsFixed(1)} km'),
-              ),
-            ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

@@ -308,17 +308,25 @@ class _TripsScreenState extends State<TripsScreen> {
                               onRideAction: (ride, action) async {
                                 final provider = context.read<RideProvider>();
                                 final messenger = ScaffoldMessenger.of(context);
+                                final navigator = Navigator.of(context);
                                 if (action == 'start') {
                                   final ok = await _showConfirmationDialog(
                                     title: 'Start this ride?',
                                     confirmLabel: 'Yes, Start Ride',
                                   );
                                   if (!ok) return;
-                                  await provider.startRide(ride.id);
+                                  final startedRide =
+                                      await provider.startRide(ride.id);
                                   if (mounted) {
                                     messenger.showSnackBar(
                                       const SnackBar(
                                           content: Text('Ride started')),
+                                    );
+                                    await navigator.push(
+                                      MaterialPageRoute(
+                                        builder: (_) => RideDetailsScreen(
+                                            extra: startedRide),
+                                      ),
                                     );
                                   }
                                 }

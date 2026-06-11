@@ -148,6 +148,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
           ),
           Expanded(
             child: Stack(
+              fit: StackFit.expand,
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
@@ -155,43 +156,45 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     elevation: 4,
                     borderRadius: BorderRadius.circular(18),
                     clipBehavior: Clip.antiAlias,
-                    child: gmap.GoogleMap(
-                      initialCameraPosition: gmap.CameraPosition(
-                        target: gmap.LatLng(
-                            driverLocation.latitude, driverLocation.longitude),
-                        zoom: 13,
-                      ),
-                      onMapCreated: (controller) {
-                        if (!_mapController.isCompleted) {
-                          _mapController.complete(controller);
-                        }
-                      },
-                      myLocationButtonEnabled: false,
-                      zoomControlsEnabled: false,
-                      mapToolbarEnabled: false,
-                      onCameraMove: (position) => _mapZoom = position.zoom,
-                      markers: {
-                        gmap.Marker(
-                          markerId: const gmap.MarkerId('driver'),
-                          position: gmap.LatLng(driverLocation.latitude,
+                    child: SizedBox.expand(
+                      child: gmap.GoogleMap(
+                        initialCameraPosition: gmap.CameraPosition(
+                          target: gmap.LatLng(driverLocation.latitude,
                               driverLocation.longitude),
+                          zoom: 13,
                         ),
-                      },
-                      polylines: {
-                        if (trailPoints.length >= 2)
-                          gmap.Polyline(
-                            polylineId: const gmap.PolylineId('trail'),
-                            points: trailPoints
-                                .map(
-                                    (p) => gmap.LatLng(p.latitude, p.longitude))
-                                .toList(),
-                            color: Colors.blue,
-                            width: 4,
-                            geodesic: true,
-                            startCap: gmap.Cap.roundCap,
-                            endCap: gmap.Cap.roundCap,
+                        onMapCreated: (controller) {
+                          if (!_mapController.isCompleted) {
+                            _mapController.complete(controller);
+                          }
+                        },
+                        myLocationButtonEnabled: false,
+                        zoomControlsEnabled: false,
+                        mapToolbarEnabled: false,
+                        onCameraMove: (position) => _mapZoom = position.zoom,
+                        markers: {
+                          gmap.Marker(
+                            markerId: const gmap.MarkerId('driver'),
+                            position: gmap.LatLng(driverLocation.latitude,
+                                driverLocation.longitude),
                           ),
-                      },
+                        },
+                        polylines: {
+                          if (trailPoints.length >= 2)
+                            gmap.Polyline(
+                              polylineId: const gmap.PolylineId('trail'),
+                              points: trailPoints
+                                  .map((p) =>
+                                      gmap.LatLng(p.latitude, p.longitude))
+                                  .toList(),
+                              color: Colors.blue,
+                              width: 4,
+                              geodesic: true,
+                              startCap: gmap.Cap.roundCap,
+                              endCap: gmap.Cap.roundCap,
+                            ),
+                        },
+                      ),
                     ),
                   ),
                 ),
