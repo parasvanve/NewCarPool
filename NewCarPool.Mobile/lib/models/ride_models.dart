@@ -78,7 +78,9 @@ class RideOffer {
         driverName: json['driverName'] ?? '',
         origin: GeoPoint.fromJson(json['origin']),
         destination: GeoPoint.fromJson(json['destination']),
-        intermediateStops: ((json['intermediateStops'] ?? json['dropPoints']) as List<dynamic>? ?? const [])
+        intermediateStops: ((json['intermediateStops'] ?? json['dropPoints'])
+                    as List<dynamic>? ??
+                const [])
             .map((x) => RideStop.fromJson(Map<String, dynamic>.from(x as Map)))
             .toList()
           ..sort((a, b) => a.order.compareTo(b.order)),
@@ -92,9 +94,18 @@ class RideOffer {
         notes: json['notes']?.toString(),
         vehicleName: json['vehicleName']?.toString(),
         vehicleNumber: json['vehicleNumber']?.toString(),
-        startedAtUtc: DateTime.tryParse(json['startedAtUtc']?.toString() ?? ''),
-        completedAtUtc: DateTime.tryParse(json['completedAtUtc']?.toString() ?? ''),
-        cancelledAtUtc: DateTime.tryParse(json['cancelledAtUtc']?.toString() ?? ''),
+        startedAtUtc: DepartureTimeUtils.tryParseUtcFromBackend(
+          json['startedAtUtc'],
+          context: 'RideOffer.startedAtUtc',
+        ),
+        completedAtUtc: DepartureTimeUtils.tryParseUtcFromBackend(
+          json['completedAtUtc'],
+          context: 'RideOffer.completedAtUtc',
+        ),
+        cancelledAtUtc: DepartureTimeUtils.tryParseUtcFromBackend(
+          json['cancelledAtUtc'],
+          context: 'RideOffer.cancelledAtUtc',
+        ),
         cancellationReason: json['cancellationReason']?.toString(),
         status: json['status'],
       );
@@ -130,6 +141,7 @@ class RideStop {
         address: json['address']?.toString(),
         latitude: (json['latitude'] as num).toDouble(),
         longitude: (json['longitude'] as num).toDouble(),
-        order: (json['order'] as num? ?? json['stopOrder'] as num?)?.toInt() ?? 0,
+        order:
+            (json['order'] as num? ?? json['stopOrder'] as num?)?.toInt() ?? 0,
       );
 }

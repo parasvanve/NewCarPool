@@ -12,7 +12,10 @@ DateTime parseUtcToLocal(String value) {
     return fallbackLocal;
   }
 
-  final parsed = DateTime.tryParse(raw);
+  final hasTimezone =
+      RegExp(r'(z|[+-]\d{2}:?\d{2})$', caseSensitive: false).hasMatch(raw);
+  final normalizedRaw = hasTimezone ? raw : '${raw}Z';
+  final parsed = DateTime.tryParse(normalizedRaw);
   if (parsed == null) {
     final fallbackUtc = DateTime.now().toUtc();
     final fallbackLocal = fallbackUtc.toLocal();
@@ -22,10 +25,10 @@ DateTime parseUtcToLocal(String value) {
     return fallbackLocal;
   }
 
-  final utc = parsed.isUtc ? parsed : parsed.toUtc();
+  final utc = parsed.toUtc();
   final local = utc.toLocal();
   debugPrint(
-    '[AppDateFormatter] raw createdAtUtc="$raw", parsedUtc=$utc, local=$local, displayed=${DateFormat('dd MMM, hh:mm a').format(local)}',
+    '[AppDateFormatter] raw createdAtUtc="$raw", normalized="$normalizedRaw", parsedUtc=$utc, local=$local, displayed=${DateFormat('dd MMM, hh:mm a').format(local)}',
   );
   return local;
 }
@@ -40,20 +43,24 @@ String timeAgo(DateTime utc) {
     return 'Just now';
   }
   if (elapsed.inMinutes == 1) {
-    debugPrint('[AppDateFormatter] utc=$utc, local=$local, displayed=1 min ago');
+    debugPrint(
+        '[AppDateFormatter] utc=$utc, local=$local, displayed=1 min ago');
     return '1 min ago';
   }
   if (elapsed.inMinutes < 60) {
     final displayed = '${elapsed.inMinutes} min ago';
-    debugPrint('[AppDateFormatter] utc=$utc, local=$local, displayed=$displayed');
+    debugPrint(
+        '[AppDateFormatter] utc=$utc, local=$local, displayed=$displayed');
     return displayed;
   }
 
-  final isToday =
-      local.year == now.year && local.month == now.month && local.day == now.day;
+  final isToday = local.year == now.year &&
+      local.month == now.month &&
+      local.day == now.day;
   if (isToday) {
     final displayed = 'Today, ${DateFormat('hh:mm a').format(local)}';
-    debugPrint('[AppDateFormatter] utc=$utc, local=$local, displayed=$displayed');
+    debugPrint(
+        '[AppDateFormatter] utc=$utc, local=$local, displayed=$displayed');
     return displayed;
   }
 
@@ -72,12 +79,14 @@ String chatTime(DateTime utc) {
 String notificationDetailsTime(DateTime utc) {
   final local = utc.toLocal();
   final now = DateTime.now();
-  final isToday =
-      local.year == now.year && local.month == now.month && local.day == now.day;
+  final isToday = local.year == now.year &&
+      local.month == now.month &&
+      local.day == now.day;
 
   if (isToday) {
     final displayed = 'Today, ${DateFormat('hh:mm a').format(local)}';
-    debugPrint('[AppDateFormatter] utc=$utc, local=$local, displayed=$displayed');
+    debugPrint(
+        '[AppDateFormatter] utc=$utc, local=$local, displayed=$displayed');
     return displayed;
   }
   final displayed = DateFormat('dd MMM, hh:mm a').format(local);

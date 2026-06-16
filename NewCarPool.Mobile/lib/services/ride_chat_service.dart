@@ -1,7 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:signalr_netcore/signalr_client.dart';
 
+import '../core/config/app_config.dart';
 import '../core/network/api_client.dart';
+import '../core/network/token_store.dart';
 import '../models/chat_models.dart';
 
 class ChatAttachmentFile {
@@ -21,9 +24,11 @@ class ChatAttachmentFile {
 }
 
 class RideChatService {
-  RideChatService(this._apiClient);
+  RideChatService(this._apiClient, this._tokenStore);
 
   final ApiClient _apiClient;
+  final TokenStore _tokenStore;
+  HubConnection? _connection;
 
   Future<List<RideChatMessage>> messages(String rideOfferId) async {
     final response =
@@ -93,5 +98,31 @@ class RideChatService {
       options: Options(contentType: 'multipart/form-data'),
     );
     return RideChatMessage.fromJson(Map<String, dynamic>.from(response.data));
+  }
+
+  Future<void> connect(void Function(RideChatMessage) onMessage) async {
+    if (_connection?.state == HubConnectionState.Connected) return;
+    final token = await _tokenStore.accessToken;
+    if (token == null) return;
+    _connection = HubConnectionBuilder()
+        .withUrl(
+          '${AppConfig.apiBaseUrl}/hubs/notifications',
+          options: HttpConnectionOptions(accessTokenFactory: () async => token),
+        )
+        .withAutomaticReconnect()
+        .build();
+
+    _connection!.on('ChatMessageReceived', (args) {
+      if (args == null || args.isEmpty || args.first is! Map) return;
+      onMessage(RideChatMessage.fromJson(
+          Map<String, dynamic>.from(args.first as Map)));
+    });
+
+    await _connection!.start();
+  }
+
+  Future<void> disconnect() async {
+    await _connection?.stop();
+    _connection = null;
   }
 }

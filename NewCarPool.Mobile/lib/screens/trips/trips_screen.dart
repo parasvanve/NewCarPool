@@ -41,16 +41,12 @@ class _TripsScreenState extends State<TripsScreen> {
       if (userId != null && userId.isNotEmpty) {
         await rideProvider.connectRealtime(userId: userId);
       }
-      rideProvider.startUpcomingAutoRefresh();
       await _refreshAll();
     });
   }
 
   @override
-  void dispose() {
-    context.read<RideProvider>().stopUpcomingAutoRefresh();
-    super.dispose();
-  }
+  void dispose() => super.dispose();
 
   Future<String?> _showCancelDialog({
     required String title,
@@ -120,9 +116,9 @@ class _TripsScreenState extends State<TripsScreen> {
     final rideProvider = context.read<RideProvider>();
     final bookingProvider = context.read<BookingProvider>();
     final rideService = context.read<RideService>();
-    await rideProvider.loadUpcomingActive();
-    await rideProvider.loadMyRides();
-    await bookingProvider.loadHistory();
+    await rideProvider.loadUpcomingActive(forceRefresh: true);
+    await rideProvider.loadMyRides(forceRefresh: true);
+    await bookingProvider.loadHistory(forceRefresh: true);
 
     final allBookingRideIds =
         bookingProvider.bookings.map((x) => x.rideOfferId).toSet();

@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'dart:async';
 
+import '../core/constants/app_constants.dart';
 import '../models/notification_models.dart';
 import '../services/notification_service.dart';
 
@@ -34,7 +35,8 @@ class NotificationProvider extends ChangeNotifier {
   }
 
   void prependRealtime(AppNotification notification) {
-    final existingIndex = notifications.indexWhere((x) => x.id == notification.id);
+    final existingIndex =
+        notifications.indexWhere((x) => x.id == notification.id);
     if (existingIndex >= 0) {
       final copy = [...notifications];
       copy[existingIndex] = notification;
@@ -85,9 +87,10 @@ class NotificationProvider extends ChangeNotifier {
     return notifications.where((n) => n.kind == activeFilter).toList();
   }
 
-  void startUnreadAutoRefresh({Duration interval = const Duration(seconds: 45)}) {
+  void startUnreadAutoRefresh(
+      {Duration interval =
+          const Duration(seconds: AppConstants.fallbackPollingSeconds)}) {
     _unreadTimer?.cancel();
-    _unreadTimer = Timer.periodic(interval, (_) => loadUnreadCount());
   }
 
   void stopUnreadAutoRefresh() {
@@ -95,13 +98,10 @@ class NotificationProvider extends ChangeNotifier {
     _unreadTimer = null;
   }
 
-  void startListAutoRefresh({Duration interval = const Duration(seconds: 45)}) {
+  void startListAutoRefresh(
+      {Duration interval =
+          const Duration(seconds: AppConstants.fallbackPollingSeconds)}) {
     _listTimer?.cancel();
-    _listTimer = Timer.periodic(interval, (_) async {
-      try {
-        await loadMine();
-      } catch (_) {}
-    });
   }
 
   void stopListAutoRefresh() {

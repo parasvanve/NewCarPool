@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using NewCarPool.Domain.Entities;
@@ -15,17 +16,28 @@ public sealed class TripReminderBackgroundService : BackgroundService
     private static readonly int[] ReminderWindowsMinutes = [60, 30, 10];
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<TripReminderBackgroundService> _logger;
+    private readonly IConfiguration _configuration;
 
     public TripReminderBackgroundService(
         IServiceScopeFactory scopeFactory,
-        ILogger<TripReminderBackgroundService> logger)
+        ILogger<TripReminderBackgroundService> logger,
+        IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _configuration = configuration;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var enabled = _configuration.GetValue("ReminderJobEnabled", false);
+        var intervalMinutes = Math.Max(10, _configuration.GetValue("ReminderJobIntervalMinutes", 10));
+        if (!enabled)
+        {
+            _logger.LogInformation("Trip reminder background job is disabled.");
+            return;
+        }
+
         while (!stoppingToken.IsCancellationRequested)
         {
             try
@@ -37,7 +49,7 @@ public sealed class TripReminderBackgroundService : BackgroundService
                 _logger.LogError(ex, "Trip reminder background job failed.");
             }
 
-            await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+            await Task.Delay(TimeSpan.FromMinutes(intervalMinutes), stoppingToken);
         }
     }
 

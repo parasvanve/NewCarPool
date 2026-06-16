@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:geolocator/geolocator.dart';
 import 'package:signalr_netcore/signalr_client.dart';
+import '../core/constants/app_constants.dart';
 import '../core/config/app_config.dart';
 import '../core/network/api_client.dart';
 import '../core/network/token_store.dart';
@@ -139,7 +140,8 @@ class TrackingService {
       position.latitude,
       position.longitude,
     );
-    return seconds >= 5 || meters >= 8;
+    return seconds >= AppConstants.locationDbSaveIntervalSeconds ||
+        meters >= AppConstants.locationMinDistanceMeters;
   }
 
   Future<void> stopDriverLocationSharing() async {

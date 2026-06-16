@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/constants/app_constants.dart';
 import '../models/booking_models.dart';
 import '../models/ride_models.dart';
 import '../services/booking_service.dart';
@@ -13,14 +14,27 @@ class BookingProvider extends ChangeNotifier {
   bool isLoading = false;
   String? errorMessage;
   final Set<String> _processingIds = <String>{};
+  DateTime? _loadedAt;
   Set<String> get processingIds => _processingIds;
 
-  Future<void> loadHistory() async {
+  bool _isCacheFresh(DateTime? loadedAt, int cacheSeconds) {
+    if (loadedAt == null) return false;
+    return DateTime.now().difference(loadedAt) <
+        Duration(seconds: cacheSeconds);
+  }
+
+  Future<void> loadHistory({bool forceRefresh = false}) async {
+    if (!forceRefresh &&
+        bookings.isNotEmpty &&
+        _isCacheFresh(_loadedAt, AppConstants.tripsCacheSeconds)) {
+      return;
+    }
     isLoading = true;
     errorMessage = null;
     notifyListeners();
     try {
       bookings = await _bookingService.history();
+      _loadedAt = DateTime.now();
     } catch (error) {
       errorMessage = error.toString();
       rethrow;
@@ -31,7 +45,22 @@ class BookingProvider extends ChangeNotifier {
   }
 
   Future<void> cancel(String bookingId, {String? reason}) async {
-    await _updateBooking(bookingId, () => _bookingService.cancel(bookingId, reason: reason));
+    await _updateBooking(
+        bookingId, () => _bookingService.cancel(bookingId, reason: reason));
+  }
+
+  void markCacheStale() {
+    _loadedAt = null;
+  }
+
+  void upsertRealtime(RideBooking booking) {
+    final index = bookings.indexWhere((x) => x.id == booking.id);
+    if (index >= 0) {
+      bookings[index] = booking;
+    } else {
+      bookings = [booking, ...bookings];
+    }
+    notifyListeners();
   }
 
   Future<RideBooking> request({
@@ -47,6 +76,7 @@ class BookingProvider extends ChangeNotifier {
       drop: drop,
     );
     bookings = [booking, ...bookings.where((x) => x.id != booking.id)];
+    _loadedAt = DateTime.now();
     notifyListeners();
     return booking;
   }
@@ -73,6 +103,7 @@ class BookingProvider extends ChangeNotifier {
       } else {
         bookings = [updated, ...bookings];
       }
+      _loadedAt = DateTime.now();
     } finally {
       _processingIds.remove(bookingId);
       notifyListeners();

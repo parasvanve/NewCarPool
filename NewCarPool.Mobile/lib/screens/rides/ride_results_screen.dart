@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/utils/location_display_formatter.dart';
 import '../../core/utils/departure_time_utils.dart';
@@ -25,20 +25,6 @@ class _RideResultsScreenState extends State<RideResultsScreen> {
   RideSort _sort = RideSort.nearby;
   int _maxPrice = 2000;
   int _minSeats = 1;
-
-  @override
-  void initState() {
-    super.initState();
-    context
-        .read<RideProvider>()
-        .startAutoRefresh(interval: const Duration(seconds: 8));
-  }
-
-  @override
-  void dispose() {
-    context.read<RideProvider>().stopAutoRefresh();
-    super.dispose();
-  }
 
   List<RideOffer> _visibleRides(List<RideOffer> rides) {
     final filtered = rides
@@ -268,8 +254,11 @@ class _RideCard extends StatelessWidget {
                 decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(12)),
-                child: Text(LocationDisplayFormatter.routeTitle(ride.origin, ride.destination),
-                    maxLines: 2, overflow: TextOverflow.ellipsis),
+                child: Text(
+                    LocationDisplayFormatter.routeTitle(
+                        ride.origin, ride.destination),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
               ),
               if (ride.intermediateStops.isNotEmpty) ...[
                 const SizedBox(height: 8),
@@ -333,9 +322,9 @@ class _LoadingList extends StatelessWidget {
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
       itemCount: 5,
-      itemBuilder: (_, __) => Card(
-        margin: const EdgeInsets.only(bottom: 12),
-        child: const Padding(
+      itemBuilder: (_, __) => const Card(
+        margin: EdgeInsets.only(bottom: 12),
+        child: Padding(
           padding: EdgeInsets.all(14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

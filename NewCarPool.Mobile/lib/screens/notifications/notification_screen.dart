@@ -1,5 +1,3 @@
-﻿import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -25,7 +23,6 @@ class NotificationScreen extends StatefulWidget {
 
 class _NotificationScreenState extends State<NotificationScreen> {
   bool _connected = false;
-  Timer? _refreshTimer;
 
   @override
   void initState() {
@@ -39,13 +36,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
       await provider.loadMine();
     }
     await _connectRealtime();
-    _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(
-      const Duration(seconds: 45),
-      (_) async {
-        await context.read<NotificationProvider>().loadUnreadCount();
-      },
-    );
   }
 
   Future<void> _connectRealtime() async {
@@ -75,7 +65,6 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
     context.read<NotificationService>().disconnect();
     super.dispose();
   }
@@ -95,7 +84,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 onPressed: () => Navigator.of(context).maybePop(),
               ),
               centerTitle: true,
-              title: const Text('Notifications', style: TextStyle(fontWeight: FontWeight.w700)),
+              title: const Text('Notifications',
+                  style: TextStyle(fontWeight: FontWeight.w700)),
               actions: const [
                 Padding(
                   padding: EdgeInsets.only(right: 8),
@@ -110,11 +100,13 @@ class _NotificationScreenState extends State<NotificationScreen> {
           constraints: const BoxConstraints(maxWidth: 580),
           child: RefreshIndicator(
             onRefresh: () => context.read<NotificationProvider>().loadMine(),
-            child: provider.errorMessage != null && provider.notifications.isEmpty
+            child: provider.errorMessage != null &&
+                    provider.notifications.isEmpty
                 ? AppRetryState(
                     title: 'Unable to load notifications',
                     subtitle: 'Check your internet connection and try again.',
-                    onRetry: () => context.read<NotificationProvider>().loadMine(),
+                    onRetry: () =>
+                        context.read<NotificationProvider>().loadMine(),
                   )
                 : ListView(
                     padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
@@ -130,7 +122,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
                               child: Text(
                                 'Notifications',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700),
+                                style: TextStyle(
+                                    fontSize: 30, fontWeight: FontWeight.w700),
                               ),
                             ),
                             IconButton(
@@ -155,16 +148,21 @@ class _NotificationScreenState extends State<NotificationScreen> {
                         )
                       else if (items.isEmpty)
                         Card(
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20)),
                           child: const Padding(
                             padding: EdgeInsets.all(24),
                             child: Column(
                               children: [
-                                Icon(Icons.notifications_none, size: 52, color: Colors.grey),
+                                Icon(Icons.notifications_none,
+                                    size: 52, color: Colors.grey),
                                 SizedBox(height: 8),
-                                Text('No notifications yet', style: TextStyle(fontWeight: FontWeight.w700)),
+                                Text('No notifications yet',
+                                    style:
+                                        TextStyle(fontWeight: FontWeight.w700)),
                                 SizedBox(height: 6),
-                                Text('Ride updates and messages will appear here.'),
+                                Text(
+                                    'Ride updates and messages will appear here.'),
                               ],
                             ),
                           ),
@@ -217,14 +215,20 @@ class _NotificationFilterTabs extends StatelessWidget {
                         Text(
                           tab.$2,
                           style: TextStyle(
-                            color: active == tab.$1 ? const Color(0xFF3450F7) : const Color(0xFF667085),
-                            fontWeight: active == tab.$1 ? FontWeight.w700 : FontWeight.w600,
+                            color: active == tab.$1
+                                ? const Color(0xFF3450F7)
+                                : const Color(0xFF667085),
+                            fontWeight: active == tab.$1
+                                ? FontWeight.w700
+                                : FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 8),
                         Container(
                           height: 2,
-                          color: active == tab.$1 ? const Color(0xFF3450F7) : Colors.transparent,
+                          color: active == tab.$1
+                              ? const Color(0xFF3450F7)
+                              : Colors.transparent,
                         ),
                       ],
                     ),
@@ -259,7 +263,8 @@ class _NotificationCard extends StatelessWidget {
           }
           if (!context.mounted) return;
           Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => NotificationDetailsScreen(notification: item)),
+            MaterialPageRoute(
+                builder: (_) => NotificationDetailsScreen(notification: item)),
           );
         },
         child: Padding(
@@ -280,9 +285,13 @@ class _NotificationCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(item.title, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+                        Text(item.title,
+                            style: const TextStyle(
+                                fontWeight: FontWeight.w700, fontSize: 18)),
                         const SizedBox(height: 4),
-                        Text(item.message, style: const TextStyle(color: Color(0xFF667085), height: 1.35)),
+                        Text(item.message,
+                            style: const TextStyle(
+                                color: Color(0xFF667085), height: 1.35)),
                       ],
                     ),
                   ),
@@ -290,10 +299,12 @@ class _NotificationCard extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(timeAgoText, style: const TextStyle(color: Color(0xFF667085))),
+                      Text(timeAgoText,
+                          style: const TextStyle(color: Color(0xFF667085))),
                       const SizedBox(height: 4),
                       if (!item.isRead)
-                        const CircleAvatar(radius: 4, backgroundColor: Color(0xFF3450F7)),
+                        const CircleAvatar(
+                            radius: 4, backgroundColor: Color(0xFF3450F7)),
                     ],
                   ),
                 ],
@@ -309,25 +320,57 @@ class _NotificationCard extends StatelessWidget {
 
   (IconData, Color, Color) _style(NotificationKind kind, int typeCode) {
     if (typeCode == 2) {
-      return (Icons.cancel_outlined, const Color(0xFFFFEBEB), const Color(0xFFFF3B30));
+      return (
+        Icons.cancel_outlined,
+        const Color(0xFFFFEBEB),
+        const Color(0xFFFF3B30)
+      );
     }
     switch (kind) {
       case NotificationKind.booking:
         if (typeCode == 6) {
-          return (Icons.check_circle_outline, const Color(0xFFDDF7E8), const Color(0xFF10B981));
+          return (
+            Icons.check_circle_outline,
+            const Color(0xFFDDF7E8),
+            const Color(0xFF10B981)
+          );
         }
-        return (Icons.event_note_outlined, const Color(0xFFE7EEFF), const Color(0xFF3450F7));
+        return (
+          Icons.event_note_outlined,
+          const Color(0xFFE7EEFF),
+          const Color(0xFF3450F7)
+        );
       case NotificationKind.trip:
         if (typeCode == 4) {
-          return (Icons.notifications_none, const Color(0xFFFFF1D8), const Color(0xFFF59E0B));
+          return (
+            Icons.notifications_none,
+            const Color(0xFFFFF1D8),
+            const Color(0xFFF59E0B)
+          );
         }
-        return (Icons.directions_car_outlined, const Color(0xFFDDF7E8), const Color(0xFF10B981));
+        return (
+          Icons.directions_car_outlined,
+          const Color(0xFFDDF7E8),
+          const Color(0xFF10B981)
+        );
       case NotificationKind.message:
-        return (Icons.chat_bubble_outline, const Color(0xFFF1E7FF), const Color(0xFF8B5CF6));
+        return (
+          Icons.chat_bubble_outline,
+          const Color(0xFFF1E7FF),
+          const Color(0xFF8B5CF6)
+        );
       case NotificationKind.system:
-        return (Icons.settings_outlined, const Color(0xFFEFF2F8), const Color(0xFF64748B));
+        return (
+          Icons.settings_outlined,
+          const Color(0xFFEFF2F8),
+          const Color(0xFF64748B)
+        );
       case NotificationKind.all:
-        return (Icons.notifications_outlined, const Color(0xFFE7EEFF), const Color(0xFF3450F7));
+        return (
+          Icons.notifications_outlined,
+          const Color(0xFFE7EEFF),
+          const Color(0xFF3450F7)
+        );
     }
   }
 }
@@ -350,9 +393,11 @@ class _ActionButtons extends StatelessWidget {
             }
             if (!context.mounted) return;
             if (item.rideId != null && item.rideId!.isNotEmpty) {
-              final ride = await context.read<RideService>().details(item.rideId!);
+              final ride =
+                  await context.read<RideService>().details(item.rideId!);
               if (!context.mounted) return;
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride)));
+              Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => RideChatScreen(ride: ride)));
             }
           },
         );
@@ -371,15 +416,19 @@ class _ActionButtons extends StatelessWidget {
         _OutlineBtn(
           label: isCancelled
               ? 'View Details'
-              : (isBooking ? (item.typeCode == 6 ? 'View Trip' : 'View Booking') : 'View Trip'),
+              : (isBooking
+                  ? (item.typeCode == 6 ? 'View Trip' : 'View Booking')
+                  : 'View Trip'),
           onTap: () async {
             if (!item.isRead) {
               await context.read<NotificationProvider>().markRead(item.id);
             }
             if (!context.mounted) return;
-            final ride = await context.read<RideService>().details(item.rideId!);
+            final ride =
+                await context.read<RideService>().details(item.rideId!);
             if (!context.mounted) return;
-            Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride)));
+            Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => RideDetailsScreen(extra: ride)));
           },
         ),
         if (!isCancelled)
@@ -390,9 +439,11 @@ class _ActionButtons extends StatelessWidget {
                 await context.read<NotificationProvider>().markRead(item.id);
               }
               if (!context.mounted) return;
-              final ride = await context.read<RideService>().details(item.rideId!);
+              final ride =
+                  await context.read<RideService>().details(item.rideId!);
               if (!context.mounted) return;
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride)));
+              Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => RideChatScreen(ride: ride)));
             },
           ),
       ],

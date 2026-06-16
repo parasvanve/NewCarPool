@@ -33,11 +33,20 @@ public sealed class RidesController : ControllerBase
     }
 
     [HttpPost("offer")]
-    public async Task<ActionResult<RideOfferDto>> Offer(CreateRideOfferRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<RideOfferDto>> Offer(
+      CreateRideOfferRequest request,
+      CancellationToken cancellationToken)
     {
         var ride = await _rideService.OfferRideAsync(User.GetUserId(), request, cancellationToken);
-        await _hubContext.Clients.All.SendAsync("RideCreated", ride, cancellationToken);
-        await _hubContext.Clients.All.SendAsync("UpcomingRidesChanged", new { rideId = ride.Id }, cancellationToken);
+
+        // Driver ko personal update
+        await _hubContext.Clients
+            .Group(AppRealtimeHub.UserGroupName(ride.DriverId.ToString()))
+            .SendAsync("RideCreated", new { ride }, cancellationToken);
+
+        await _hubContext.Clients.All
+            .SendAsync("UpcomingRidesChanged", new { ride }, cancellationToken);
+
         return Ok(ride);
     }
 

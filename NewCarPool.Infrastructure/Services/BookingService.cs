@@ -6,6 +6,8 @@ using NewCarPool.Application.Interfaces.Services;
 using NewCarPool.Domain.Entities;
 using NewCarPool.Domain.Enums;
 using NewCarPool.Infrastructure.Data;
+using Microsoft.AspNetCore.SignalR;
+using NewCarPool.Infrastructure.Hubs;
 
 namespace NewCarPool.Infrastructure.Services;
 
@@ -14,15 +16,18 @@ public sealed class BookingService : IBookingService
     private readonly NewCarPoolDbContext _dbContext;
     private readonly IGenericRepository<RideBooking> _bookings;
     private readonly INotificationService _notificationService;
+    private readonly IHubContext<AppRealtimeHub> _hubContext;
 
     public BookingService(
         NewCarPoolDbContext dbContext,
         IGenericRepository<RideBooking> bookings,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IHubContext<AppRealtimeHub> hubContext)
     {
         _dbContext = dbContext;
         _bookings = bookings;
         _notificationService = notificationService;
+        _hubContext = hubContext;
     }
 
     public Task<RideBookingDto> AcceptAsync(Guid driverId, Guid bookingId, CancellationToken cancellationToken) =>
@@ -74,7 +79,9 @@ public sealed class BookingService : IBookingService
                         booking.Id),
                     cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
-                return Map(booking);
+                var dto = Map(booking);
+                await SendBookingEventAsync("BookingCancelled", booking.RideOffer.DriverId, booking.PassengerId, dto, cancellationToken);
+                return dto;
             }
             catch
             {
@@ -85,9 +92,28 @@ public sealed class BookingService : IBookingService
     }
 
     public async Task<IReadOnlyList<RideBookingDto>> HistoryAsync(Guid userId, CancellationToken cancellationToken) =>
-        await Query().Where(x => x.PassengerId == userId || x.RideOffer.DriverId == userId)
+        await _bookings.Query()
+            .AsNoTracking()
+            .Where(x => x.PassengerId == userId || x.RideOffer.DriverId == userId)
             .OrderByDescending(x => x.CreatedAtUtc)
-            .Select(x => Map(x))
+            .Select(x => new RideBookingDto(
+                x.Id,
+                x.RideOfferId,
+                x.PassengerId,
+                x.Passenger.FullName,
+                x.SeatsBooked,
+                new GeoPointDto(
+                    x.PassengerPickupName,
+                    x.PassengerPickupLatitude,
+                    x.PassengerPickupLongitude,
+                    x.PassengerPickupAddress),
+                new GeoPointDto(
+                    x.PassengerDropName,
+                    x.PassengerDropLatitude,
+                    x.PassengerDropLongitude,
+                    x.PassengerDropAddress),
+                x.Status,
+                x.CreatedAtUtc))
             .ToListAsync(cancellationToken);
 
     private async Task<RideBookingDto> ChangeByDriverAsync(Guid driverId, Guid bookingId, BookingStatus status, CancellationToken cancellationToken, bool restoreSeats = false)
@@ -116,7 +142,14 @@ public sealed class BookingService : IBookingService
                 booking.Status = status;
                 await _dbContext.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
-                return Map(booking);
+                var dto = Map(booking);
+                await SendBookingEventAsync(
+                    status == BookingStatus.Confirmed ? "BookingCreated" : "BookingCancelled",
+                    booking.RideOffer.DriverId,
+                    booking.PassengerId,
+                    dto,
+                    cancellationToken);
+                return dto;
             }
             catch
             {
@@ -128,6 +161,22 @@ public sealed class BookingService : IBookingService
 
     private IQueryable<RideBooking> Query() =>
         _bookings.Query().Include(x => x.Passenger).Include(x => x.RideOffer);
+
+    private Task SendBookingEventAsync(
+        string eventName,
+        Guid driverId,
+        Guid passengerId,
+        RideBookingDto booking,
+        CancellationToken cancellationToken)
+    {
+        var payload = new { booking };
+        var tasks = new[] { driverId, passengerId }
+            .Distinct()
+            .Select(userId => _hubContext.Clients
+                .Group(AppRealtimeHub.UserGroupName(userId.ToString()))
+                .SendAsync(eventName, payload, cancellationToken));
+        return Task.WhenAll(tasks);
+    }
 
     private static RideBookingDto Map(RideBooking booking) =>
         new(

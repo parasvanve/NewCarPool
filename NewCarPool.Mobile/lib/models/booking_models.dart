@@ -1,3 +1,4 @@
+import '../core/utils/departure_time_utils.dart';
 import 'ride_models.dart';
 
 enum BookingStatus {
@@ -58,8 +59,15 @@ class RideBooking {
         passengerName: json['passengerName']?.toString() ?? '',
         seatsBooked: (json['seatsBooked'] as num?)?.toInt() ?? 0,
         status: (json['status'] as num?)?.toInt() ?? 0,
-        createdAtUtc: DateTime.tryParse(json['createdAtUtc']?.toString() ?? '') ?? DateTime.now().toUtc(),
-        cancelledAtUtc: DateTime.tryParse(json['cancelledAtUtc']?.toString() ?? ''),
+        createdAtUtc: DepartureTimeUtils.tryParseUtcFromBackend(
+              json['createdAtUtc'],
+              context: 'RideBooking.createdAtUtc',
+            ) ??
+            DateTime.now().toUtc(),
+        cancelledAtUtc: DepartureTimeUtils.tryParseUtcFromBackend(
+          json['cancelledAtUtc'],
+          context: 'RideBooking.cancelledAtUtc',
+        ),
         cancellationReason: json['cancellationReason']?.toString(),
         passengerPickup: _pointFromJson(
           raw: json['passengerPickup'] ?? json['pickup'],
@@ -97,8 +105,10 @@ class RideBooking {
     }
 
     if (latitude != null && longitude != null) {
-      final latNum = latitude is num ? latitude : num.tryParse(latitude.toString());
-      final lngNum = longitude is num ? longitude : num.tryParse(longitude.toString());
+      final latNum =
+          latitude is num ? latitude : num.tryParse(latitude.toString());
+      final lngNum =
+          longitude is num ? longitude : num.tryParse(longitude.toString());
       if (latNum != null && lngNum != null) {
         return GeoPoint(
           name: name?.toString() ?? 'Point',

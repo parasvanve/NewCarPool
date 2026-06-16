@@ -9,6 +9,8 @@ using NewCarPool.Domain.Enums;
 using Microsoft.Extensions.Logging;
 using Microsoft.Data.SqlClient;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.SignalR;
+using NewCarPool.Infrastructure.Hubs;
 
 namespace NewCarPool.Infrastructure.Services;
 
@@ -44,6 +46,7 @@ public sealed class RideService : IRideService
     private readonly ILogger<RideService> _logger;
     private readonly INotificationService _notificationService;
     private readonly IWebHostEnvironment _environment;
+    private readonly IHubContext<AppRealtimeHub> _hubContext;
 
     public RideService(
         IRideRepository rides,
@@ -56,6 +59,7 @@ public sealed class RideService : IRideService
         ILogger<RideService> logger,
         INotificationService notificationService,
         IWebHostEnvironment environment,
+        IHubContext<AppRealtimeHub> hubContext,
         IUnitOfWork unitOfWork)
     {
         _rides = rides;
@@ -68,6 +72,7 @@ public sealed class RideService : IRideService
         _logger = logger;
         _notificationService = notificationService;
         _environment = environment;
+        _hubContext = hubContext;
         _unitOfWork = unitOfWork;
     }
 
@@ -153,40 +158,55 @@ public sealed class RideService : IRideService
 
     public async Task<PagedResult<RideOfferDto>> SearchAsync(SearchRideRequest request, CancellationToken cancellationToken)
     {
-        var result = await _rides.SearchAsync(request, cancellationToken);
-        return new PagedResult<RideOfferDto>(
-            result.Items.Select(MapRide).ToList(),
-            result.Page,
-            result.PageSize,
-            result.TotalCount);
+        var page = Math.Max(request.Page, 1);
+        var pageSize = Math.Clamp(request.PageSize, 1, 50);
+        const double originWindow = 0.25d;
+        const double destinationWindow = 0.25d;
+
+        var query = _rideOffers.Query()
+            .AsNoTracking()
+            .Where(x => x.Status == RideStatus.Open && x.AvailableSeats >= request.Seats)
+            .Where(x => Math.Abs(x.OriginLatitude - request.OriginLatitude) <= originWindow)
+            .Where(x => Math.Abs(x.OriginLongitude - request.OriginLongitude) <= originWindow)
+            .Where(x => Math.Abs(x.DestinationLatitude - request.DestinationLatitude) <= destinationWindow)
+            .Where(x => Math.Abs(x.DestinationLongitude - request.DestinationLongitude) <= destinationWindow);
+
+        if (request.DepartureDateUtc.HasValue)
+        {
+            var start = request.DepartureDateUtc.Value.Date;
+            var end = start.AddDays(1);
+            query = query.Where(x => x.DepartureTimeUtc >= start && x.DepartureTimeUtc < end);
+        }
+
+        var items = await ProjectRideCards(query
+            .OrderBy(x => x.DepartureTimeUtc)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize))
+            .ToListAsync(cancellationToken);
+
+        return new PagedResult<RideOfferDto>(items, page, pageSize, items.Count);
     }
 
     public async Task<IReadOnlyList<RideOfferDto>> UpcomingActiveRidesAsync(CancellationToken cancellationToken)
     {
         var now = DateTime.UtcNow;
-        var rides = await _rideOffers.Query()
+        return await ProjectRideCards(_rideOffers.Query()
             .AsNoTracking()
-            .Include(x => x.Driver)
-            .Include(x => x.Bookings)
-            .Include(x => x.IntermediateStops)
-            .Where(x => (x.Status == RideStatus.Open || x.Status == RideStatus.Full) && x.DepartureTimeUtc > now)
+            .Where(x => x.Status == RideStatus.Open)
+            .Where(x => x.AvailableSeats > 0)
+            .Where(x => x.DepartureTimeUtc > now)
             .OrderBy(x => x.DepartureTimeUtc)
             .Take(200)
-            .ToListAsync(cancellationToken);
-        return rides.Select(MapRide).ToList();
+        ).ToListAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<RideOfferDto>> MineAsync(Guid userId, CancellationToken cancellationToken)
     {
-        var rides = await _rideOffers.Query()
+        return await ProjectRideCards(_rideOffers.Query()
             .AsNoTracking()
-            .Include(x => x.Driver)
-            .Include(x => x.Bookings)
-            .Include(x => x.IntermediateStops)
             .Where(x => x.DriverId == userId)
             .OrderByDescending(x => x.DepartureTimeUtc)
-            .ToListAsync(cancellationToken);
-        return rides.Select(MapRide).ToList();
+        ).ToListAsync(cancellationToken);
     }
 
     public async Task<RideOfferDto> DetailsAsync(Guid rideOfferId, CancellationToken cancellationToken) =>
@@ -411,7 +431,10 @@ public sealed class RideService : IRideService
                         cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
                     booking.Passenger = passenger;
-                    return MapBooking(booking);
+                    var bookingDto = MapBooking(booking);
+                    var rideDto = MapRide(ride);
+                    await SendBookingEventAsync("BookingCreated", ride.DriverId, passengerId, bookingDto, rideDto, cancellationToken);
+                    return bookingDto;
                 }
                 catch
                 {
@@ -444,12 +467,29 @@ public sealed class RideService : IRideService
 
     public async Task<IReadOnlyList<RideBookingDto>> ParticipantsAsync(Guid rideOfferId, CancellationToken cancellationToken)
     {
-        var participants = await _rideBookings.Query()
+        return await _rideBookings.Query()
+            .AsNoTracking()
             .Where(x => x.RideOfferId == rideOfferId && x.Status == BookingStatus.Confirmed)
-            .Include(x => x.Passenger)
             .OrderBy(x => x.CreatedAtUtc)
+            .Select(x => new RideBookingDto(
+                x.Id,
+                x.RideOfferId,
+                x.PassengerId,
+                x.Passenger.FullName,
+                x.SeatsBooked,
+                new GeoPointDto(
+                    x.PassengerPickupName,
+                    x.PassengerPickupLatitude,
+                    x.PassengerPickupLongitude,
+                    x.PassengerPickupAddress),
+                new GeoPointDto(
+                    x.PassengerDropName,
+                    x.PassengerDropLatitude,
+                    x.PassengerDropLongitude,
+                    x.PassengerDropAddress),
+                x.Status,
+                x.CreatedAtUtc))
             .ToListAsync(cancellationToken);
-        return participants.Select(MapBooking).ToList();
     }
 
     public async Task<IReadOnlyList<RideChatMessageDto>> RideChatAsync(Guid userId, Guid rideOfferId, CancellationToken cancellationToken)
@@ -515,7 +555,9 @@ public sealed class RideService : IRideService
                 cancellationToken);
         }
         message.SenderUser = sender;
-        return MapChatMessage(message);
+        var dto = MapChatMessage(message);
+        await SendChatMessageEventAsync(rideOfferId, dto, participantIds, cancellationToken);
+        return dto;
     }
 
     public async Task<RideChatMessageDto> UploadChatAttachmentAsync(
@@ -600,7 +642,9 @@ public sealed class RideService : IRideService
         }
 
         message.SenderUser = sender;
-        return MapChatMessage(message);
+        var dto = MapChatMessage(message);
+        await SendChatMessageEventAsync(rideOfferId, dto, participantIds, cancellationToken);
+        return dto;
     }
 
     public Task<RideOfferDto> StartRideAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken) =>
@@ -685,10 +729,13 @@ public sealed class RideService : IRideService
                         booking.Id),
                     cancellationToken);
             }
-            return MapRide(ride);
+            var cancelledRideDto = MapRide(ride);
+            await SendRideStatusEventAsync("RideCancelled", ride, cancelledRideDto, activeBookings.Select(x => x.PassengerId), cancellationToken);
+            return cancelledRideDto;
         }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        var rideDto = MapRide(ride);
         if (status == RideStatus.Started || status == RideStatus.Completed)
         {
             var bookedPassengerIds = await _rideBookings.Query()
@@ -712,8 +759,64 @@ public sealed class RideService : IRideService
                         null),
                     cancellationToken);
             }
+            await SendRideStatusEventAsync(
+                status == RideStatus.Started ? "RideStarted" : "RideCompleted",
+                ride,
+                rideDto,
+                bookedPassengerIds,
+                cancellationToken);
         }
-        return MapRide(ride);
+        return rideDto;
+    }
+
+    private Task SendBookingEventAsync(
+        string eventName,
+        Guid driverId,
+        Guid passengerId,
+        RideBookingDto booking,
+        RideOfferDto ride,
+        CancellationToken cancellationToken)
+    {
+        var payload = new { booking, ride };
+        var tasks = new[] { driverId, passengerId }
+            .Distinct()
+            .Select(userId => _hubContext.Clients
+                .Group(AppRealtimeHub.UserGroupName(userId.ToString()))
+                .SendAsync(eventName, payload, cancellationToken));
+        return Task.WhenAll(tasks);
+    }
+
+    private Task SendRideStatusEventAsync(
+        string eventName,
+        RideOffer ride,
+        RideOfferDto rideDto,
+        IEnumerable<Guid> passengerIds,
+        CancellationToken cancellationToken)
+    {
+        var userIds = passengerIds.Append(ride.DriverId).Distinct();
+        var payload = new { ride = rideDto };
+        var tasks = userIds.Select(userId => _hubContext.Clients
+            .Group(AppRealtimeHub.UserGroupName(userId.ToString()))
+            .SendAsync(eventName, payload, cancellationToken));
+        return Task.WhenAll(tasks);
+    }
+
+    private async Task SendChatMessageEventAsync(
+        Guid rideOfferId,
+        RideChatMessageDto message,
+        IEnumerable<Guid> passengerIds,
+        CancellationToken cancellationToken)
+    {
+        var driverId = await _rideOffers.Query()
+            .AsNoTracking()
+            .Where(x => x.Id == rideOfferId)
+            .Select(x => x.DriverId)
+            .FirstOrDefaultAsync(cancellationToken);
+        var userIds = passengerIds.Append(driverId).Where(x => x != Guid.Empty).Distinct();
+        var tasks = userIds.Select(userId => _hubContext.Clients
+            .Group(AppRealtimeHub.UserGroupName(userId.ToString()))
+            .SendAsync("ChatMessageReceived", message, cancellationToken));
+        await Task.WhenAll(tasks);
     }
 
     private static void ValidateRideOffer(DateTime departureTimeUtc)
@@ -813,6 +916,34 @@ public sealed class RideService : IRideService
             ride.CompletedAtUtc,
             ride.CancelledAtUtc,
             ride.CancellationReason);
+
+    private static IQueryable<RideOfferDto> ProjectRideCards(IQueryable<RideOffer> query) =>
+        query.Select(ride => new RideOfferDto(
+            ride.Id,
+            ride.DriverId,
+            ride.VehicleId,
+            ride.Driver.FullName,
+            new GeoPointDto(ride.OriginName, ride.OriginLatitude, ride.OriginLongitude, ride.OriginAddress),
+            new GeoPointDto(ride.DestinationName, ride.DestinationLatitude, ride.DestinationLongitude, ride.DestinationAddress),
+            ride.IntermediateStops
+                .OrderBy(x => x.StopOrder)
+                .Select(x => new RideStopDto(x.Name, x.Address, x.Latitude, x.Longitude, x.StopOrder))
+                .ToList(),
+            ride.DepartureTimeUtc,
+            ride.AvailableSeats,
+            ride.Bookings.Count(x => x.Status == BookingStatus.Confirmed),
+            ride.PricePerSeat,
+            ride.Notes,
+            ride.VehicleName,
+            ride.VehicleNumber,
+            ride.RoutePolyline,
+            ride.DistanceKm,
+            ride.EtaMinutes,
+            ride.Status,
+            ride.StartedAtUtc,
+            ride.CompletedAtUtc,
+            ride.CancelledAtUtc,
+            ride.CancellationReason));
 
     private static DateTime NormalizeToUtc(DateTime value) =>
         value.Kind switch

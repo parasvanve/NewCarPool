@@ -11,6 +11,9 @@ namespace NewCarPool.Infrastructure.Services;
 
 public sealed class TrackingService : ITrackingService
 {
+    private const int LocationDbSaveIntervalSeconds = 60;
+    private const double LocationMinDistanceMeters = 30;
+
     private readonly IRideRepository _rides;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NewCarPoolDbContext _dbContext;
@@ -38,6 +41,18 @@ public sealed class TrackingService : ITrackingService
         }
 
         var createdAtUtc = DateTime.UtcNow;
+        if (!ShouldPersistLocation(ride, request, createdAtUtc))
+        {
+            return new LocationUpdateDto(
+                ride.Id,
+                driverId,
+                request.Latitude,
+                request.Longitude,
+                request.Heading,
+                request.SpeedKph,
+                createdAtUtc);
+        }
+
         var locationUpdate = new RideLocationUpdate
         {
             Id = Guid.NewGuid(),
@@ -68,6 +83,41 @@ public sealed class TrackingService : ITrackingService
             locationUpdate.SpeedKph,
             locationUpdate.CreatedAtUtc);
     }
+
+    private static bool ShouldPersistLocation(RideOffer ride, LocationUpdateRequest request, DateTime nowUtc)
+    {
+        if (ride.LastDriverLocationAtUtc is null ||
+            ride.LastDriverLatitude is null ||
+            ride.LastDriverLongitude is null)
+        {
+            return true;
+        }
+
+        var seconds = (nowUtc - ride.LastDriverLocationAtUtc.Value).TotalSeconds;
+        var meters = DistanceMeters(
+            ride.LastDriverLatitude.Value,
+            ride.LastDriverLongitude.Value,
+            request.Latitude,
+            request.Longitude);
+
+        return seconds >= LocationDbSaveIntervalSeconds || meters >= LocationMinDistanceMeters;
+    }
+
+    private static double DistanceMeters(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double earthRadiusMeters = 6371000;
+        var dLat = DegreesToRadians(lat2 - lat1);
+        var dLon = DegreesToRadians(lon2 - lon1);
+        var rLat1 = DegreesToRadians(lat1);
+        var rLat2 = DegreesToRadians(lat2);
+        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                Math.Cos(rLat1) * Math.Cos(rLat2) *
+                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+        return earthRadiusMeters * c;
+    }
+
+    private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180;
 
     public async Task<LocationUpdateDto> GetLatestLocationAsync(Guid userId, Guid rideOfferId, CancellationToken cancellationToken)
     {

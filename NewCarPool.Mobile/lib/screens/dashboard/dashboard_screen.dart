@@ -39,14 +39,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final auth = context.read<AuthProvider>();
       final userId = auth.session?.userId;
       final rideProvider = context.read<RideProvider>();
+      final bookingProvider = context.read<BookingProvider>();
       rideProvider.loadUpcomingActive();
       if (userId != null && userId.isNotEmpty) {
-        rideProvider.connectRealtime(userId: userId);
+        rideProvider.connectRealtime(
+          userId: userId,
+          onBookingChanged: bookingProvider.upsertRealtime,
+        );
       }
-      rideProvider.startUpcomingAutoRefresh();
       context.read<NotificationProvider>().loadUnreadCount();
       context.read<NotificationProvider>().startUnreadAutoRefresh();
-      context.read<BookingProvider>().loadHistory();
+      bookingProvider.loadHistory();
       _connectNotificationRealtime();
     });
   }
@@ -78,7 +81,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void dispose() {
     context.read<NotificationProvider>().stopUnreadAutoRefresh();
-    context.read<RideProvider>().stopUpcomingAutoRefresh();
     context.read<RideProvider>().disconnectRealtime();
     context.read<NotificationService>().disconnect();
     super.dispose();
@@ -143,7 +145,10 @@ class _DesktopSidebar extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(22),
-        boxShadow: const [BoxShadow(color: Color(0x140F172A), blurRadius: 16, offset: Offset(0, 6))],
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x140F172A), blurRadius: 16, offset: Offset(0, 6))
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,42 +158,52 @@ class _DesktopSidebar extends StatelessWidget {
               CircleAvatar(
                 radius: 18,
                 backgroundColor: Color(0xFFE7EAFE),
-                child: Icon(Icons.directions_car_filled, color: AppDesignTokens.brandStart),
+                child: Icon(Icons.directions_car_filled,
+                    color: AppDesignTokens.brandStart),
               ),
               SizedBox(width: 10),
-              Text('NewCarPool', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+              Text('NewCarPool',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             ],
           ),
           const SizedBox(height: 18),
           ...items.asMap().entries.map(
-            (entry) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: InkWell(
-                onTap: () => onChanged(entry.key),
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: index == entry.key ? const Color(0xFFE7EAFE) : Colors.transparent,
+                (entry) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: InkWell(
+                    onTap: () => onChanged(entry.key),
                     borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(entry.value.$1, color: index == entry.key ? AppDesignTokens.brandStart : const Color(0xFF64748B)),
-                      const SizedBox(width: 10),
-                      Text(
-                        entry.value.$2,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: index == entry.key ? AppDesignTokens.brandStart : const Color(0xFF334155),
-                        ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: index == entry.key
+                            ? const Color(0xFFE7EAFE)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                    ],
+                      child: Row(
+                        children: [
+                          Icon(entry.value.$1,
+                              color: index == entry.key
+                                  ? AppDesignTokens.brandStart
+                                  : const Color(0xFF64748B)),
+                          const SizedBox(width: 10),
+                          Text(
+                            entry.value.$2,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: index == entry.key
+                                  ? AppDesignTokens.brandStart
+                                  : const Color(0xFF334155),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
           const Spacer(),
           Container(
             padding: const EdgeInsets.all(12),
@@ -200,9 +215,11 @@ class _DesktopSidebar extends StatelessWidget {
             child: const Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Need Help?', style: TextStyle(fontWeight: FontWeight.w700)),
+                Text('Need Help?',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
                 SizedBox(height: 4),
-                Text('Contact support 24/7 for booking and trip help.', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                Text('Contact support 24/7 for booking and trip help.',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
               ],
             ),
           ),
@@ -223,21 +240,36 @@ class _HomePage extends StatelessWidget {
     final rideProvider = context.watch<RideProvider>();
     final bookings = context.watch<BookingProvider>().bookings;
     final nowUtc = DateTime.now().toUtc();
-    final rides = List<RideOffer>.from(rideProvider.upcomingActiveRides)
-      ..retainWhere((r) => r.departureTimeUtc.isAfter(nowUtc) && r.status == 1 && r.availableSeats > 0)
+    final activeRides = List<RideOffer>.from(rideProvider.upcomingActiveRides)
+      ..retainWhere((ride) => ride.status == 3)
+      ..sort((a, b) => b.departureTimeUtc.compareTo(a.departureTimeUtc));
+    final upcomingRides = List<RideOffer>.from(rideProvider.upcomingActiveRides)
+      ..retainWhere((ride) =>
+          (ride.status == 1 || ride.status == 2) &&
+          ride.departureTimeUtc.isAfter(nowUtc))
       ..sort((a, b) => a.departureTimeUtc.compareTo(b.departureTimeUtc));
+    final rides = [...activeRides, ...upcomingRides];
     final myUserId = auth.session?.userId;
-    final firstName = ((profile?.fullName ?? auth.session?.fullName ?? '').trim().split(' ').firstWhere((e) => e.trim().isNotEmpty, orElse: () => 'there'));
+    final firstName = ((profile?.fullName ?? auth.session?.fullName ?? '')
+        .trim()
+        .split(' ')
+        .firstWhere((e) => e.trim().isNotEmpty, orElse: () => 'there'));
     final unreadCount = context.watch<NotificationProvider>().unreadCountValue;
 
     final bookedByRide = {
-      for (final booking in bookings.where((b) => b.bookingStatus == BookingStatus.accepted && (myUserId == null || b.passengerId == myUserId)))
+      for (final booking in bookings.where((b) =>
+          b.bookingStatus == BookingStatus.accepted &&
+          (myUserId == null || b.passengerId == myUserId)))
         booking.rideOfferId: booking,
     };
 
     final firstRide = rides.isEmpty ? null : rides.first;
-    final pickupText = firstRide == null ? 'Enter pickup location' : LocationDisplayFormatter.title(firstRide.origin);
-    final destinationText = firstRide == null ? 'Enter destination' : LocationDisplayFormatter.title(firstRide.destination);
+    final pickupText = firstRide == null
+        ? 'Enter pickup location'
+        : LocationDisplayFormatter.title(firstRide.origin);
+    final destinationText = firstRide == null
+        ? 'Enter destination'
+        : LocationDisplayFormatter.title(firstRide.destination);
 
     final leftContent = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -246,7 +278,8 @@ class _HomePage extends StatelessWidget {
         const SizedBox(height: 12),
         _GreetingCard(firstName: firstName),
         const SizedBox(height: 12),
-        _PickupDestinationCard(pickupText: pickupText, destinationText: destinationText),
+        _PickupDestinationCard(
+            pickupText: pickupText, destinationText: destinationText),
         const SizedBox(height: 12),
         Row(
           children: [
@@ -256,7 +289,8 @@ class _HomePage extends StatelessWidget {
                 style: FilledButton.styleFrom(
                   backgroundColor: AppDesignTokens.brandStart,
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
                 ),
                 icon: const Icon(Icons.search),
                 label: const Text('Search Ride'),
@@ -269,7 +303,8 @@ class _HomePage extends StatelessWidget {
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AppDesignTokens.brandStart),
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
                 ),
                 icon: const Icon(Icons.local_taxi_outlined),
                 label: const Text('Offer Ride'),
@@ -280,7 +315,8 @@ class _HomePage extends StatelessWidget {
         if (!isDesktop) ...[
           const SizedBox(height: 14),
           _UpcomingSection(
-            rides: rides,
+            activeRides: activeRides,
+            upcomingRides: upcomingRides,
             bookedByRide: bookedByRide,
             isLoading: rideProvider.isLoading,
             myUserId: myUserId,
@@ -325,7 +361,8 @@ class _HomePage extends StatelessWidget {
                 const SizedBox(height: 8),
                 Expanded(
                   child: _UpcomingSection(
-                    rides: rides,
+                    activeRides: activeRides,
+                    upcomingRides: upcomingRides,
                     bookedByRide: bookedByRide,
                     isLoading: rideProvider.isLoading,
                     myUserId: myUserId,
@@ -350,7 +387,8 @@ class _TopHomeBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        const Text('Home', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+        const Text('Home',
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
         const Spacer(),
         IconButton(
           onPressed: () => context.push(AppRoutes.notifications),
@@ -363,11 +401,17 @@ class _TopHomeBar extends StatelessWidget {
                   right: -2,
                   top: -2,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(10)),
                     child: Text(
                       unreadCount > 99 ? '99+' : '$unreadCount',
-                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -392,8 +436,14 @@ class _GreetingCard extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(colors: [Color(0xFF5B61FF), Color(0xFF2E39E6)], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        boxShadow: const [BoxShadow(color: Color(0x260F172A), blurRadius: 18, offset: Offset(0, 8))],
+        gradient: const LinearGradient(
+            colors: [Color(0xFF5B61FF), Color(0xFF2E39E6)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight),
+        boxShadow: const [
+          BoxShadow(
+              color: Color(0x260F172A), blurRadius: 18, offset: Offset(0, 8))
+        ],
       ),
       child: Row(
         children: [
@@ -401,13 +451,22 @@ class _GreetingCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Hi, $firstName 👋', style: TextStyle(color: Colors.white, fontSize: isMobile ? 28 : 36, fontWeight: FontWeight.w800)),
+                Text('Hi, $firstName 👋',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: isMobile ? 28 : 36,
+                        fontWeight: FontWeight.w800)),
                 const SizedBox(height: 6),
-                Text('Where are you going today?', style: TextStyle(color: Colors.white70, fontSize: isMobile ? 18 : 22, fontWeight: FontWeight.w600)),
+                Text('Where are you going today?',
+                    style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: isMobile ? 18 : 22,
+                        fontWeight: FontWeight.w600)),
               ],
             ),
           ),
-          const Icon(Icons.directions_car_filled, color: Colors.white70, size: 50),
+          const Icon(Icons.directions_car_filled,
+              color: Colors.white70, size: 50),
         ],
       ),
     );
@@ -415,7 +474,8 @@ class _GreetingCard extends StatelessWidget {
 }
 
 class _PickupDestinationCard extends StatelessWidget {
-  const _PickupDestinationCard({required this.pickupText, required this.destinationText});
+  const _PickupDestinationCard(
+      {required this.pickupText, required this.destinationText});
 
   final String pickupText;
   final String destinationText;
@@ -428,9 +488,17 @@ class _PickupDestinationCard extends StatelessWidget {
         padding: const EdgeInsets.all(14),
         child: Column(
           children: [
-            _LocationRow(icon: Icons.trip_origin, iconColor: const Color(0xFF16A34A), label: 'Pickup location', value: pickupText),
+            _LocationRow(
+                icon: Icons.trip_origin,
+                iconColor: const Color(0xFF16A34A),
+                label: 'Pickup location',
+                value: pickupText),
             const Divider(height: 18),
-            _LocationRow(icon: Icons.location_on, iconColor: const Color(0xFFEF4444), label: 'Destination', value: destinationText),
+            _LocationRow(
+                icon: Icons.location_on,
+                iconColor: const Color(0xFFEF4444),
+                label: 'Destination',
+                value: destinationText),
           ],
         ),
       ),
@@ -439,7 +507,11 @@ class _PickupDestinationCard extends StatelessWidget {
 }
 
 class _LocationRow extends StatelessWidget {
-  const _LocationRow({required this.icon, required this.iconColor, required this.label, required this.value});
+  const _LocationRow(
+      {required this.icon,
+      required this.iconColor,
+      required this.label,
+      required this.value});
 
   final IconData icon;
   final Color iconColor;
@@ -456,7 +528,9 @@ class _LocationRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF475569))),
+              Text(label,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w600, color: Color(0xFF475569))),
               const SizedBox(height: 2),
               Text(value, maxLines: 1, overflow: TextOverflow.ellipsis),
             ],
@@ -475,10 +549,30 @@ class _QuickActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final actions = [
-      (Icons.garage_outlined, 'Vehicles', 'Manage your vehicles', AppRoutes.vehicles),
-      (Icons.payments_outlined, 'Payments', 'Transactions & history', AppRoutes.payments),
-      (Icons.location_searching_outlined, 'Tracking', 'Live ride tracking', AppRoutes.tracking),
-      (Icons.fact_check_outlined, 'Requests', 'Ride requests', AppRoutes.driverRequests),
+      (
+        Icons.garage_outlined,
+        'Vehicles',
+        'Manage your vehicles',
+        AppRoutes.vehicles
+      ),
+      (
+        Icons.payments_outlined,
+        'Payments',
+        'Transactions & history',
+        AppRoutes.payments
+      ),
+      (
+        Icons.location_searching_outlined,
+        'Tracking',
+        'Live ride tracking',
+        AppRoutes.tracking
+      ),
+      (
+        Icons.fact_check_outlined,
+        'Requests',
+        'Ride requests',
+        AppRoutes.driverRequests
+      ),
     ];
     return GridView.builder(
       shrinkWrap: true,
@@ -493,7 +587,8 @@ class _QuickActions extends StatelessWidget {
       itemBuilder: (context, i) {
         final action = actions[i];
         return Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           child: InkWell(
             borderRadius: BorderRadius.circular(18),
             onTap: () => context.push(action.$4),
@@ -505,12 +600,16 @@ class _QuickActions extends StatelessWidget {
                   CircleAvatar(
                     radius: 16,
                     backgroundColor: const Color(0xFFEEF2FF),
-                    child: Icon(action.$1, color: AppDesignTokens.brandStart, size: 18),
+                    child: Icon(action.$1,
+                        color: AppDesignTokens.brandStart, size: 18),
                   ),
                   const Spacer(),
-                  Text(action.$2, style: const TextStyle(fontWeight: FontWeight.w700)),
+                  Text(action.$2,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
                   const SizedBox(height: 2),
-                  Text(action.$3, style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                  Text(action.$3,
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFF64748B))),
                 ],
               ),
             ),
@@ -535,10 +634,30 @@ class _WhyNewCarpoolCard extends StatelessWidget {
             ? (available - 12) / 2
             : (available - 12) / 2;
     final items = [
-      (Icons.verified_user_outlined, 'Verified Drivers', 'Safe & secure users', const Color(0xFF4F46E5)),
-      (Icons.savings_outlined, 'Affordable Rides', 'Save on every ride', const Color(0xFF22C55E)),
-      (Icons.schedule_outlined, 'On-time Travel', 'Reliable schedules', const Color(0xFFF59E0B)),
-      (Icons.support_agent_outlined, '24/7 Support', 'Help when needed', const Color(0xFF06B6D4)),
+      (
+        Icons.verified_user_outlined,
+        'Verified Drivers',
+        'Safe & secure users',
+        const Color(0xFF4F46E5)
+      ),
+      (
+        Icons.savings_outlined,
+        'Affordable Rides',
+        'Save on every ride',
+        const Color(0xFF22C55E)
+      ),
+      (
+        Icons.schedule_outlined,
+        'On-time Travel',
+        'Reliable schedules',
+        const Color(0xFFF59E0B)
+      ),
+      (
+        Icons.support_agent_outlined,
+        '24/7 Support',
+        'Help when needed',
+        const Color(0xFF06B6D4)
+      ),
     ];
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -547,7 +666,8 @@ class _WhyNewCarpoolCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Why NewCarPool?', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
+            const Text('Why NewCarPool?',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             if (isMobile)
               GridView.builder(
@@ -612,14 +732,16 @@ class _WhyBenefitTile extends StatelessWidget {
                   item.$2,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700, fontSize: 12),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   item.$3,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                  style:
+                      const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                 ),
               ],
             ),
@@ -632,14 +754,16 @@ class _WhyBenefitTile extends StatelessWidget {
 
 class _UpcomingSection extends StatelessWidget {
   const _UpcomingSection({
-    required this.rides,
+    required this.activeRides,
+    required this.upcomingRides,
     required this.bookedByRide,
     required this.isLoading,
     required this.myUserId,
     required this.desktopScrollable,
   });
 
-  final List<RideOffer> rides;
+  final List<RideOffer> activeRides;
+  final List<RideOffer> upcomingRides;
   final Map<String, RideBooking> bookedByRide;
   final bool isLoading;
   final String? myUserId;
@@ -647,27 +771,55 @@ class _UpcomingSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final rides = [...activeRides, ...upcomingRides];
+    final showUpcomingHeader =
+        activeRides.isNotEmpty && upcomingRides.isNotEmpty;
     final list = isLoading && rides.isEmpty
         ? const Center(child: CircularProgressIndicator())
         : rides.isEmpty
             ? const Card(
                 child: Padding(
                   padding: EdgeInsets.all(20),
-                  child: Text('No upcoming rides yet. Search rides and book your next trip.'),
+                  child: Text(
+                      'No upcoming rides yet. Search rides and book your next trip.'),
                 ),
               )
             : ListView.builder(
                 shrinkWrap: !desktopScrollable,
-                physics: desktopScrollable ? const AlwaysScrollableScrollPhysics() : const NeverScrollableScrollPhysics(),
-                itemCount: rides.length,
+                physics: desktopScrollable
+                    ? const AlwaysScrollableScrollPhysics()
+                    : const NeverScrollableScrollPhysics(),
+                itemCount: rides.length + (showUpcomingHeader ? 1 : 0),
                 itemBuilder: (_, index) {
-                  final ride = rides[index];
+                  if (showUpcomingHeader && index == activeRides.length) {
+                    return const Padding(
+                      padding: EdgeInsets.fromLTRB(0, 4, 0, 12),
+                      child: Text(
+                        'Upcoming Rides',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.w800),
+                      ),
+                    );
+                  }
+                  final rideIndex =
+                      activeRides.isNotEmpty && index > activeRides.length
+                          ? index - 1
+                          : index;
+                  if (rideIndex >= rides.length) {
+                    return const SizedBox.shrink();
+                  }
+                  final ride = rides[rideIndex];
                   final booking = bookedByRide[ride.id];
-                  final isDriver = myUserId != null && ride.driverId == myUserId;
+                  final isDriver =
+                      myUserId != null && ride.driverId == myUserId;
                   final isBooked = booking != null;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: _DashboardRideCard(ride: ride, booking: booking, isDriver: isDriver, isBooked: isBooked),
+                    child: _DashboardRideCard(
+                        ride: ride,
+                        booking: booking,
+                        isDriver: isDriver,
+                        isBooked: isBooked),
                   );
                 },
               );
@@ -677,10 +829,15 @@ class _UpcomingSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Expanded(
-              child: Text('Upcoming Rides', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+            Expanded(
+              child: Text(
+                  activeRides.isNotEmpty ? 'Active Ride' : 'Upcoming Rides',
+                  style: const TextStyle(
+                      fontSize: 28, fontWeight: FontWeight.w800)),
             ),
-            TextButton(onPressed: () => context.push(AppRoutes.trips), child: const Text('View all')),
+            TextButton(
+                onPressed: () => context.push(AppRoutes.trips),
+                child: const Text('View all')),
           ],
         ),
         const SizedBox(height: 8),
@@ -707,8 +864,12 @@ class _DashboardRideCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final nodes = buildRideTimeline(
       ride: ride,
-      yourPickupName: booking?.passengerPickup?.name == null ? null : LocationDisplayFormatter.title(booking!.passengerPickup!),
-      yourDropName: booking?.passengerDrop?.name == null ? null : LocationDisplayFormatter.title(booking!.passengerDrop!),
+      yourPickupName: booking?.passengerPickup?.name == null
+          ? null
+          : LocationDisplayFormatter.title(booking!.passengerPickup!),
+      yourDropName: booking?.passengerDrop?.name == null
+          ? null
+          : LocationDisplayFormatter.title(booking!.passengerDrop!),
       departureUtc: ride.departureTimeUtc,
     );
     final title = nodes.map((e) => e.locationTitle).join(' -> ');
@@ -727,15 +888,23 @@ class _DashboardRideCard extends StatelessWidget {
                     title,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 17),
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: const Color(0xFFDFF7EA), borderRadius: BorderRadius.circular(12)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: const Color(0xFFDFF7EA),
+                      borderRadius: BorderRadius.circular(12)),
                   child: Text(
-                    DepartureTimeUtils.formatFriendly(ride.departureTimeUtc, context: 'Dashboard Card'),
-                    style: const TextStyle(color: Color(0xFF15803D), fontWeight: FontWeight.w700, fontSize: 12),
+                    DepartureTimeUtils.formatFriendly(ride.departureTimeUtc,
+                        context: 'Dashboard Card'),
+                    style: const TextStyle(
+                        color: Color(0xFF15803D),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12),
                   ),
                 ),
               ],
@@ -747,10 +916,24 @@ class _DashboardRideCard extends StatelessWidget {
               spacing: 14,
               runSpacing: 8,
               children: [
-                _MetaChip(icon: Icons.person_outline, label: 'Driver', value: ride.driverName),
-                _MetaChip(icon: Icons.event_seat_outlined, label: 'Seats Left', value: '${ride.availableSeats} seats'),
-                _MetaChip(icon: Icons.currency_rupee, label: 'Price / Seat', value: '₹${ride.pricePerSeat}'),
-                _MetaChip(icon: Icons.directions_car_outlined, label: 'Vehicle', value: '${ride.vehicleName ?? 'Vehicle'} ${ride.vehicleNumber ?? ''}'.trim()),
+                _MetaChip(
+                    icon: Icons.person_outline,
+                    label: 'Driver',
+                    value: ride.driverName),
+                _MetaChip(
+                    icon: Icons.event_seat_outlined,
+                    label: 'Seats Left',
+                    value: '${ride.availableSeats} seats'),
+                _MetaChip(
+                    icon: Icons.currency_rupee,
+                    label: 'Price / Seat',
+                    value: '₹${ride.pricePerSeat}'),
+                _MetaChip(
+                    icon: Icons.directions_car_outlined,
+                    label: 'Vehicle',
+                    value:
+                        '${ride.vehicleName ?? 'Vehicle'} ${ride.vehicleNumber ?? ''}'
+                            .trim()),
               ],
             ),
             const SizedBox(height: 10),
@@ -758,18 +941,24 @@ class _DashboardRideCard extends StatelessWidget {
               width: double.infinity,
               child: isBooked
                   ? FilledButton.icon(
-                      onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideChatScreen(ride: ride))),
+                      onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                              builder: (_) => RideChatScreen(ride: ride))),
                       icon: const Icon(Icons.chat_bubble_outline),
                       label: const Text('Chat with Driver'),
                     )
                   : isDriver
                       ? OutlinedButton.icon(
-                          onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => RideDetailsScreen(extra: ride))),
+                          onPressed: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                  builder: (_) =>
+                                      RideDetailsScreen(extra: ride))),
                           icon: const Icon(Icons.open_in_new),
                           label: const Text('View Details / Manage'),
                         )
                       : FilledButton(
-                          onPressed: () => context.push(AppRoutes.booking, extra: ride),
+                          onPressed: () =>
+                              context.push(AppRoutes.booking, extra: ride),
                           child: const Text('Book Ride'),
                         ),
             ),
@@ -781,7 +970,8 @@ class _DashboardRideCard extends StatelessWidget {
 }
 
 class _MetaChip extends StatelessWidget {
-  const _MetaChip({required this.icon, required this.label, required this.value});
+  const _MetaChip(
+      {required this.icon, required this.label, required this.value});
 
   final IconData icon;
   final String label;

@@ -38,8 +38,26 @@ public sealed class VehicleService : IVehicleService
         return Map(vehicle);
     }
 
-    public async Task<IReadOnlyList<VehicleDto>> GetMineAsync(Guid ownerId, CancellationToken cancellationToken) =>
-        await _vehicles.Query().Where(x => x.OwnerId == ownerId).OrderByDescending(x => x.CreatedAtUtc).Select(x => Map(x)).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<VehicleDto>> GetMineAsync(
+     Guid ownerId,
+     CancellationToken cancellationToken)
+    {
+        return await _vehicles.Query()
+            .AsNoTracking()
+            .Where(x => x.OwnerId == ownerId)
+            .OrderByDescending(x => x.CreatedAtUtc)
+            .Select(x => new VehicleDto(
+                x.Id,
+                x.VehicleName,
+                x.VehicleNumber,
+                x.VehicleType,
+                x.Color,
+                x.Seats,
+                x.RcImagePath,
+                x.VehicleImagePath,
+                x.IsVerified))
+            .ToListAsync(cancellationToken);
+    }
 
     public async Task<VehicleDto> UpdateAsync(Guid ownerId, Guid vehicleId, UpsertVehicleRequest request, CancellationToken cancellationToken)
     {

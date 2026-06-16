@@ -2,14 +2,32 @@ import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
 class DepartureTimeUtils {
+  static final RegExp _timeZoneSuffixPattern =
+      RegExp(r'(z|[+-]\d{2}:?\d{2})$', caseSensitive: false);
+
   static DateTime parseUtcFromBackend(dynamic value, {String? context}) {
-    final raw = value?.toString() ?? '';
-    final parsed = DateTime.parse(raw);
-    final utc = parsed.isUtc ? parsed : parsed.toUtc();
+    final raw = value?.toString().trim() ?? '';
+    final normalizedRaw =
+        _timeZoneSuffixPattern.hasMatch(raw) ? raw : '${raw}Z';
+    final parsed = DateTime.parse(normalizedRaw);
+    final utc = parsed.toUtc();
     debugPrint(
-      '[DepartureTime][RECEIVED_UTC]${context == null ? '' : '[$context]'} raw=$raw parsedUtc=${utc.toIso8601String()}',
+      '[DepartureTime][RECEIVED_UTC]${context == null ? '' : '[$context]'} raw=$raw normalized=$normalizedRaw parsedUtc=${utc.toIso8601String()}',
     );
     return utc;
+  }
+
+  static DateTime? tryParseUtcFromBackend(dynamic value, {String? context}) {
+    final raw = value?.toString().trim() ?? '';
+    if (raw.isEmpty) return null;
+    try {
+      return parseUtcFromBackend(raw, context: context);
+    } catch (error) {
+      debugPrint(
+        '[DepartureTime][INVALID_UTC]${context == null ? '' : '[$context]'} raw=$raw error=$error',
+      );
+      return null;
+    }
   }
 
   static DateTime toLocalForDisplay(DateTime utc, {String? context}) {

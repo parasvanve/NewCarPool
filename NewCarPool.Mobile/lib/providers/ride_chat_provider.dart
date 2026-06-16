@@ -12,10 +12,8 @@ class RideChatProvider extends ChangeNotifier {
   bool isLoading = false;
   bool isUploading = false;
   Timer? _pollTimer;
-  String? _rideId;
 
   Future<void> load(String rideOfferId) async {
-    _rideId = rideOfferId;
     isLoading = true;
     notifyListeners();
     try {
@@ -26,19 +24,12 @@ class RideChatProvider extends ChangeNotifier {
     }
   }
 
-  void startPolling({Duration interval = const Duration(seconds: 3)}) {
+  void startPolling({Duration interval = const Duration(seconds: 120)}) {
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(interval, (_) async {
-      final rideId = _rideId;
-      if (rideId == null) return;
-      try {
-        final latest = await _service.messages(rideId);
-        if (!_sameMessages(latest, messages)) {
-          messages = latest;
-          notifyListeners();
-        }
-      } catch (_) {}
-    });
+  }
+
+  Future<void> connectRealtime() async {
+    await _service.connect(upsertRealtime);
   }
 
   void stopPolling() {
@@ -49,8 +40,7 @@ class RideChatProvider extends ChangeNotifier {
   Future<void> send(String rideOfferId, String message) async {
     final sent =
         await _service.send(rideOfferId: rideOfferId, message: message);
-    messages = [...messages, sent];
-    notifyListeners();
+    upsertRealtime(sent);
   }
 
   Future<void> uploadAttachment({
@@ -67,22 +57,28 @@ class RideChatProvider extends ChangeNotifier {
         file: file,
         caption: caption,
       );
-      messages = [...messages, uploaded];
+      upsertRealtime(uploaded);
     } finally {
       isUploading = false;
       notifyListeners();
     }
   }
 
-  bool _sameMessages(List<RideChatMessage> a, List<RideChatMessage> b) {
-    if (a.length != b.length) return false;
-    if (a.isEmpty) return true;
-    return a.last.id == b.last.id;
+  void upsertRealtime(RideChatMessage message) {
+    final index = messages.indexWhere((x) => x.id == message.id);
+    if (index >= 0) {
+      messages[index] = message;
+    } else {
+      messages = [...messages, message];
+    }
+    messages.sort((a, b) => a.createdAtUtc.compareTo(b.createdAtUtc));
+    notifyListeners();
   }
 
   @override
   void dispose() {
     _pollTimer?.cancel();
+    _service.disconnect();
     super.dispose();
   }
 }

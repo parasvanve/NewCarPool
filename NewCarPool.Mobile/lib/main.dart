@@ -39,7 +39,9 @@ class NewCarPoolApp extends StatelessWidget {
         Provider.value(value: dependencies.profileService),
         Provider.value(value: dependencies.mapService),
         Provider.value(value: dependencies.trackingService),
-        Provider(create: (context) => RideChatService(context.read())),
+        Provider(
+            create: (context) =>
+                RideChatService(context.read(), context.read())),
         ChangeNotifierProvider(
             create: (_) => AuthProvider(
                 dependencies.authService, dependencies.tokenStore)),

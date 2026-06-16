@@ -35,13 +35,12 @@ class _RideChatScreenState extends State<RideChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = context.read<RideChatProvider>();
       provider.load(widget.ride.id).then((_) => _scrollToEnd());
-      provider.startPolling();
+      provider.connectRealtime();
     });
   }
 
   @override
   void dispose() {
-    context.read<RideChatProvider>().stopPolling();
     _ctrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();

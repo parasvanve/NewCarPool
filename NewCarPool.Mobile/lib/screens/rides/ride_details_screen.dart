@@ -47,9 +47,10 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final bookingProvider = context.read<BookingProvider>();
       await _prepareMarkerIcons();
       await _initializeFallbackMapCenter();
-      final bookingProvider = context.read<BookingProvider>();
+      if (!mounted) return;
       if (bookingProvider.bookings.isEmpty && !bookingProvider.isLoading) {
         await bookingProvider.loadHistory();
       }
@@ -222,8 +223,11 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   }
 
   Future<void> _syncTracking(RideOffer ride) async {
+    final authProvider = context.read<AuthProvider>();
+    final bookingProvider = context.read<BookingProvider>();
+    final trackingService = context.read<TrackingService>();
     _passengerPollTimer?.cancel();
-    await context.read<TrackingService>().stopAll();
+    await trackingService.stopAll();
     if (ride.status != 3) {
       setState(() {
         _trackingMessage = null;
@@ -232,18 +236,18 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
       return;
     }
 
-    final myUserId = context.read<AuthProvider>().session?.userId;
+    final myUserId = authProvider.session?.userId;
     final isDriver = myUserId != null && ride.driverId == myUserId;
-    final myBooking = _latestBooking(ride.id);
+    final myBooking = _latestBookingFrom(bookingProvider, ride.id, myUserId);
     final isBookedPassenger =
         myBooking != null && myBooking.bookingStatus == BookingStatus.accepted;
 
     if (isDriver) {
-      await _startDriverTracking(ride);
+      await _startDriverTracking(ride, trackingService);
       return;
     }
     if (isBookedPassenger) {
-      await _startPassengerTracking(ride);
+      await _startPassengerTracking(ride, trackingService);
       return;
     }
     setState(() => _trackingMessage = 'Waiting for driver location...');
@@ -251,23 +255,27 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
 
   RideBooking? _latestBooking(String rideId) {
     final myUserId = context.read<AuthProvider>().session?.userId;
-    final list = context
-        .read<BookingProvider>()
-        .bookings
+    return _latestBookingFrom(
+        context.read<BookingProvider>(), rideId, myUserId);
+  }
+
+  RideBooking? _latestBookingFrom(
+      BookingProvider bookingProvider, String rideId, String? myUserId) {
+    final list = bookingProvider.bookings
         .where((b) => b.rideOfferId == rideId && b.passengerId == myUserId)
         .toList()
       ..sort((a, b) => b.createdAtUtc.compareTo(a.createdAtUtc));
     return list.isEmpty ? null : list.first;
   }
 
-  Future<void> _startDriverTracking(RideOffer ride) async {
+  Future<void> _startDriverTracking(
+      RideOffer ride, TrackingService trackingService) async {
     if (mounted) {
       setState(() => _trackingMessage =
           'Your live location is being shared with passengers.');
     }
 
-    final started =
-        await context.read<TrackingService>().startDriverLocationSharing(
+    final started = await trackingService.startDriverLocationSharing(
       ride.id,
       onPublished: (payload) async {
         final lat = (payload['latitude'] as num?)?.toDouble();
@@ -286,10 +294,10 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     }
   }
 
-  Future<void> _startPassengerTracking(RideOffer ride) async {
+  Future<void> _startPassengerTracking(
+      RideOffer ride, TrackingService trackingService) async {
     Future<void> fetchLatest() async {
-      final data =
-          await context.read<TrackingService>().latestLocation(ride.id);
+      final data = await trackingService.latestLocation(ride.id);
       if (!mounted) return;
       if (data == null) {
         setState(() => _trackingMessage = 'Waiting for driver location...');
@@ -306,10 +314,8 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     }
 
     await fetchLatest();
-    _passengerPollTimer =
-        Timer.periodic(const Duration(seconds: 10), (_) => fetchLatest());
     try {
-      await context.read<TrackingService>().connect(
+      await trackingService.connect(
         ride.id,
         (payload) async {
           final lat = (payload['latitude'] as num?)?.toDouble();
@@ -380,9 +386,10 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final ride = _ride;
-    if (ride == null)
+    if (ride == null) {
       return const Scaffold(
           body: Center(child: Text('Ride details unavailable')));
+    }
     final myUserId = context.watch<AuthProvider>().session?.userId;
     final isDriver = myUserId != null && ride.driverId == myUserId;
     final isStarted = ride.status == 3;
@@ -672,8 +679,9 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
           : _fallbackMapCenter;
 
   double _driverDistanceKm(RideBooking? booking) {
-    if (_driverLivePoint == null || booking?.passengerPickup == null)
+    if (_driverLivePoint == null || booking?.passengerPickup == null) {
       return 2.4;
+    }
     return _distance.as(
           LengthUnit.Kilometer,
           LatLng(_driverLivePoint!.latitude, _driverLivePoint!.longitude),
