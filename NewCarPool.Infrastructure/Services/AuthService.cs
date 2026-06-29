@@ -44,12 +44,22 @@ public sealed class AuthService : IAuthService
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
+        if (!EmailDomainValidator.IsAllowed(request.Email))
+        {
+            throw new ApiException(
+                "Only approved company email addresses are allowed.");
+        }
         await Task.CompletedTask;
         throw new ApiException("Please verify OTP before creating an account.");
     }
 
     public async Task<RegisterOtpResponse> SendRegisterOtpAsync(SendRegisterOtpRequest request, CancellationToken cancellationToken)
     {
+        if (!EmailDomainValidator.IsAllowed(request.Email))
+        {
+            throw new ApiException(
+                "Only approved company email addresses are allowed.");
+        }
         ValidateRegistration(request);
         var email = request.Email.Trim().ToLowerInvariant();
         var phoneNumber = NormalizePhoneNumber(request.PhoneNumber);
@@ -116,6 +126,11 @@ public sealed class AuthService : IAuthService
 
     public async Task<AuthResponse> VerifyRegisterOtpAsync(VerifyRegisterOtpRequest request, CancellationToken cancellationToken)
     {
+        if (!EmailDomainValidator.IsAllowed(request.Email))
+        {
+            throw new ApiException(
+                "Only approved company email addresses are allowed.");
+        }
         var email = request.Email.Trim().ToLowerInvariant();
         var otp = request.Otp.Trim();
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(otp))
@@ -177,6 +192,11 @@ public sealed class AuthService : IAuthService
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
+        if (!EmailDomainValidator.IsAllowed(request.Email))
+        {
+            throw new ApiException(
+                "Only approved company email addresses are allowed.");
+        }
         var email = request.Email.Trim().ToLowerInvariant();
          var user = await _users.GetByEmailAsync(email, cancellationToken);
         if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
