@@ -94,14 +94,15 @@ public sealed class VehicleService : IVehicleService
 
     private static void Validate(UpsertVehicleRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.VehicleName) || string.IsNullOrWhiteSpace(request.VehicleNumber))
+        if (string.IsNullOrWhiteSpace(request.VehicleName) ||
+            string.IsNullOrWhiteSpace(request.VehicleNumber))
         {
             throw new ApiException("Vehicle name and number are required.");
         }
 
-        if (request.Seats <= 0)
+        if (request.Seats is < 4 or > 8)
         {
-            throw new ApiException("Vehicle seats must be greater than zero.");
+            throw new ApiException("Vehicle seating capacity must be between 4 and 8 seats.");
         }
     }
 

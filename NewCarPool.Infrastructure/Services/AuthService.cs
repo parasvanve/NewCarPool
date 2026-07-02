@@ -8,6 +8,7 @@ using NewCarPool.Application.Interfaces.Repositories;
 using NewCarPool.Application.Interfaces.Services;
 using NewCarPool.Domain.Entities;
 using NewCarPool.Infrastructure.Authentication;
+using System.Text.RegularExpressions;
 
 namespace NewCarPool.Infrastructure.Services;
 
@@ -44,6 +45,13 @@ public sealed class AuthService : IAuthService
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
+        if (!Regex.IsMatch(
+      request.Password,
+      @"^(?=.*[A-Za-z])(?=.*\d)(?=.*[@#$!%*?&])[A-Za-z\d@$!%*?&]{8,}$"))
+        {
+            throw new ApiException(
+                "Password must contain at least 8 characters, one letter, one number, and one special character.");
+        }
         if (!EmailDomainValidator.IsAllowed(request.Email))
         {
             throw new ApiException(
@@ -55,12 +63,22 @@ public sealed class AuthService : IAuthService
 
     public async Task<RegisterOtpResponse> SendRegisterOtpAsync(SendRegisterOtpRequest request, CancellationToken cancellationToken)
     {
+        ValidateRegistration(request);
+        if (!Regex.IsMatch(request.Password, @"^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$"))
+        {
+            throw new ApiException(
+         "Password must be at least 8 characters long and contain at least one letter, one number, and one special character.");
+        }
+        if (request.Password != request.ConfirmPassword)
+        {
+            throw new ApiException("Password and Confirm Password do not match.");
+        }
         if (!EmailDomainValidator.IsAllowed(request.Email))
         {
             throw new ApiException(
                 "Only approved company email addresses are allowed.");
         }
-        ValidateRegistration(request);
+      
         var email = request.Email.Trim().ToLowerInvariant();
         var phoneNumber = NormalizePhoneNumber(request.PhoneNumber);
         if (await _users.ExistsByEmailAsync(email, cancellationToken))

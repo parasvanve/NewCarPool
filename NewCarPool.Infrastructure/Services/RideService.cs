@@ -95,7 +95,18 @@ public sealed class RideService : IRideService
                 request.DepartureTimeUtc,
                 departureUtc);
             ValidateRideOffer(departureUtc);
-            await EnsureVehicleOwnershipAsync(driverId, request.VehicleId, cancellationToken);
+            var vehicle = await EnsureVehicleOwnershipAsync(driverId, request.VehicleId, cancellationToken);
+            if (request.AvailableSeats < 1)
+            {
+                throw new ApiException("Available seats must be at least 1.", 400);
+            }
+
+            if (request.AvailableSeats > vehicle.Seats)
+            {
+                throw new ApiException(
+                    $"You can offer a maximum of {vehicle.Seats} seats for this vehicle.",
+                    400);
+            }
 
             var ride = new RideOffer
             {
@@ -870,23 +881,26 @@ public sealed class RideService : IRideService
         }
     }
 
-    private async Task EnsureVehicleOwnershipAsync(Guid driverId, Guid vehicleId, CancellationToken cancellationToken)
+    private async Task<Vehicle> EnsureVehicleOwnershipAsync(
+        Guid driverId,
+        Guid vehicleId,
+        CancellationToken cancellationToken)
     {
-        var vehicleExists = await _dbContext.Vehicles
+        var vehicle = await _dbContext.Vehicles
             .AsNoTracking()
-            .AnyAsync(x => x.Id == vehicleId, cancellationToken);
-        if (!vehicleExists)
+            .FirstOrDefaultAsync(x => x.Id == vehicleId, cancellationToken);
+
+        if (vehicle == null)
         {
             throw new ApiException("Selected vehicle does not exist.", 400);
         }
 
-        var ownedByDriver = await _dbContext.Vehicles
-            .AsNoTracking()
-            .AnyAsync(x => x.Id == vehicleId && x.OwnerId == driverId, cancellationToken);
-        if (!ownedByDriver)
+        if (vehicle.OwnerId != driverId)
         {
             throw new ApiException("You can only publish rides with your own vehicle.", 403);
         }
+
+        return vehicle;
     }
 
     private static RideOfferDto MapRide(RideOffer ride) =>

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 
@@ -265,10 +265,11 @@ class _HomePage extends StatelessWidget {
 
     final firstRide = rides.isEmpty ? null : rides.first;
     final pickupText = firstRide == null
-        ? 'Enter pickup location'
+        ? 'Pickup Location'
         : LocationDisplayFormatter.title(firstRide.origin);
+
     final destinationText = firstRide == null
-        ? 'Enter destination'
+        ? 'Destination'
         : LocationDisplayFormatter.title(firstRide.destination);
 
     final leftContent = Column(

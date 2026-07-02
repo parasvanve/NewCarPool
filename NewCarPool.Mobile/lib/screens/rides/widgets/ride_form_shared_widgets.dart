@@ -27,8 +27,10 @@ class RideLocationField extends StatelessWidget {
       readOnly: readOnly,
       onTap: onTap,
       onChanged: onChanged,
-      decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon, color: color)),
-      validator: (v) => (v?.trim().isNotEmpty ?? false) ? null : '$label required',
+      decoration: InputDecoration(
+          labelText: label, prefixIcon: Icon(icon, color: color)),
+      validator: (v) =>
+          (v?.trim().isNotEmpty ?? false) ? null : '$label required',
     );
   }
 }
@@ -54,9 +56,11 @@ class RideSeatSelector extends StatelessWidget {
       ),
       child: Row(
         children: [
-          IconButton(onPressed: onDec, icon: const Icon(Icons.remove_circle_outline)),
+          IconButton(
+              onPressed: onDec, icon: const Icon(Icons.remove_circle_outline)),
           Text('$seats', style: const TextStyle(fontWeight: FontWeight.bold)),
-          IconButton(onPressed: onInc, icon: const Icon(Icons.add_circle_outline)),
+          IconButton(
+              onPressed: onInc, icon: const Icon(Icons.add_circle_outline)),
         ],
       ),
     );
@@ -79,9 +83,32 @@ class RidePickField extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      child: InputDecorator(
-        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
-        child: const SizedBox(height: 18),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.grey.shade700, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const Icon(Icons.keyboard_arrow_down, color: Colors.grey, size: 20),
+          ],
+        ),
       ),
     );
   }
@@ -105,7 +132,8 @@ class RideRouteSummaryCard extends StatelessWidget {
       child: ListTile(
         leading: const Icon(Icons.route),
         title: Text('Distance: ${distanceKm?.toStringAsFixed(1) ?? '--'} km'),
-        subtitle: Text('ETA: ${etaMinutes ?? '--'} min${warning == null ? '' : ' • $warning'}'),
+        subtitle: Text(
+            'ETA: ${etaMinutes ?? '--'} min${warning == null ? '' : ' • $warning'}'),
       ),
     );
   }
@@ -134,15 +162,21 @@ class RideTimeline extends StatelessWidget {
           children: [
             Column(
               children: [
-                Icon(first ? Icons.trip_origin : (last ? Icons.location_on : Icons.more_horiz), size: 18),
-                if (!last) Container(width: 2, height: 24, color: Colors.grey.shade300),
+                Icon(
+                    first
+                        ? Icons.trip_origin
+                        : (last ? Icons.location_on : Icons.more_horiz),
+                    size: 18),
+                if (!last)
+                  Container(width: 2, height: 24, color: Colors.grey.shade300),
               ],
             ),
             const SizedBox(width: 8),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.only(top: 1),
-                child: Text(e.value, maxLines: 1, overflow: TextOverflow.ellipsis),
+                child:
+                    Text(e.value, maxLines: 1, overflow: TextOverflow.ellipsis),
               ),
             ),
           ],

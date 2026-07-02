@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
@@ -757,6 +757,13 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
     }
 
     final v = vehicles.firstWhere((x) => x.id == vId);
+    // Prevent offering more seats than the vehicle capacity
+    if (_seats > v.seats) {
+      _showInlineWarning(
+        'You can offer a maximum of ${v.seats} seats for this vehicle.',
+      );
+      return;
+    }
     final selectedLocalDeparture = DateTime(
       _date!.year,
       _date!.month,
@@ -828,6 +835,15 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
   }
 
   Widget _buildPanelContent(OfferRideProvider route, VehicleProvider vehicles) {
+    int maxSeats = 8;
+
+    if (vehicles.vehicles.isNotEmpty) {
+      final selectedVehicle = vehicles.vehicles.firstWhere(
+        (v) => v.id == (_vehicleId ?? vehicles.vehicles.first.id),
+      );
+
+      maxSeats = selectedVehicle.seats;
+    }
     return Form(
       key: _formKey,
       child: ListView(
@@ -990,7 +1006,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
             RideSeatSelector(
               seats: _seats,
               onDec: _seats > 1 ? () => setState(() => _seats--) : null,
-              onInc: _seats < 8 ? () => setState(() => _seats++) : null,
+              onInc: _seats < maxSeats ? () => setState(() => _seats++) : null,
             ),
           ]),
           const SizedBox(height: 8),
