@@ -1373,6 +1373,14 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
   }
 
   Widget _buildMobileDetailsCard(VehicleProvider vehicles) {
+    int maxSeats = 8;
+    if (vehicles.vehicles.isNotEmpty) {
+      final selectedVehicle = vehicles.vehicles.firstWhere(
+        (v) => v.id == (_vehicleId ?? vehicles.vehicles.first.id),
+      );
+
+      maxSeats = selectedVehicle.seats;
+    }
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: _mobileCardDecoration(),
@@ -1435,7 +1443,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
             RideSeatSelector(
               seats: _seats,
               onDec: _seats > 1 ? () => setState(() => _seats--) : null,
-              onInc: _seats < 8 ? () => setState(() => _seats++) : null,
+              onInc: _seats < maxSeats ? () => setState(() => _seats++) : null,
             ),
           ]),
           const SizedBox(height: 10),
