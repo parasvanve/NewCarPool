@@ -20,8 +20,10 @@ class AuthProvider extends ChangeNotifier {
     await _runAuth(() => _authService.login(email, password));
   }
 
-  Future<void> register(String fullName, String email, String phoneNumber, String password) async {
-    await _runAuth(() => _authService.register(fullName, email, phoneNumber, password));
+  Future<void> register(String fullName, String email, String phoneNumber,
+      String password) async {
+    await _runAuth(
+        () => _authService.register(fullName, email, phoneNumber, password));
   }
 
   Future<DateTime?> sendRegisterOtp({
@@ -62,7 +64,8 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> resetPassword(String email, String resetToken, String newPassword) async {
+  Future<void> resetPassword(
+      String email, String resetToken, String newPassword) async {
     isLoading = true;
     notifyListeners();
     try {

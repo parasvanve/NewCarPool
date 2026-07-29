@@ -1,16 +1,18 @@
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Microsoft.Identity.Client;
 using NewCarPool.Application.Common;
 using NewCarPool.Application.DTOs.Rides;
 using NewCarPool.Application.Interfaces.Repositories;
 using NewCarPool.Application.Interfaces.Services;
-using Microsoft.EntityFrameworkCore;
-using System.Data;
 using NewCarPool.Domain.Entities;
 using NewCarPool.Domain.Enums;
-using Microsoft.Extensions.Logging;
-using Microsoft.Data.SqlClient;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.SignalR;
 using NewCarPool.Infrastructure.Hubs;
+using System.Data;
 
 namespace NewCarPool.Infrastructure.Services;
 
@@ -47,6 +49,8 @@ public sealed class RideService : IRideService
     private readonly INotificationService _notificationService;
     private readonly IWebHostEnvironment _environment;
     private readonly IHubContext<AppRealtimeHub> _hubContext;
+    private readonly AppSettingsOptions _appSettings;
+
 
     public RideService(
         IRideRepository rides,
@@ -60,7 +64,8 @@ public sealed class RideService : IRideService
         INotificationService notificationService,
         IWebHostEnvironment environment,
         IHubContext<AppRealtimeHub> hubContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IOptions<AppSettingsOptions> appSettings)
     {
         _rides = rides;
         _users = users;
@@ -74,6 +79,8 @@ public sealed class RideService : IRideService
         _environment = environment;
         _hubContext = hubContext;
         _unitOfWork = unitOfWork;
+        _appSettings = appSettings.Value;
+
     }
 
     public async Task<RideOfferDto> OfferRideAsync(Guid driverId, CreateRideOfferRequest request, CancellationToken cancellationToken)
@@ -222,6 +229,55 @@ public sealed class RideService : IRideService
 
     public async Task<RideOfferDto> DetailsAsync(Guid rideOfferId, CancellationToken cancellationToken) =>
         MapRide(await _rides.GetRideByIdAsync(rideOfferId, cancellationToken) ?? throw new ApiException("Ride not found.", 404));
+
+    public async Task<SharedRideDto> GetSharedRideAsync(
+     Guid rideId,
+     CancellationToken cancellationToken)
+    {
+        var ride = await _rides.GetRideByIdAsync(
+            rideId,
+            cancellationToken);
+
+        if (ride == null)
+            throw new ApiException("Ride not found.", 404);
+
+        if (ride.Status == RideStatus.Cancelled)
+            throw new ApiException("Ride has been cancelled.", 400);
+
+        if (ride.Status == RideStatus.Completed)
+            throw new ApiException("Ride already completed.", 400);
+
+        return MapSharedRide(ride);
+    }
+
+
+
+    public async Task<RideShareResponseDto> GetRideShareDataAsync(
+     Guid rideId,
+     CancellationToken cancellationToken)
+    {
+        var ride = await _rides.GetRideByIdAsync(
+            rideId,
+            cancellationToken);
+
+        if (ride == null)
+            throw new ApiException("Ride not found.", 404);
+
+        // Replace with your actual domain when deployed.
+        //var shareUrl = $"{_appSettings.BaseUrl}/rides/{ride.Id}";
+        //var shareUrl = $"{_appSettings.BaseUrl}/api/rides/{ride.Id}";
+        var shareUrl = $"newcarpool://localhost/rides/{ride.Id}";
+
+        return new RideShareResponseDto(
+            DriverName: ride.Driver.FullName,
+            Origin: ride.OriginName,
+            Destination: ride.DestinationName,
+            DepartureTime: ride.DepartureTimeUtc.ToString("dd MMM yyyy | hh:mm tt"),
+            AvailableSeats: ride.AvailableSeats,
+            PricePerSeat: ride.PricePerSeat,
+            ShareUrl: shareUrl
+        );
+    }
 
     public async Task<RideOfferDto> UpdateRideAsync(Guid driverId, Guid rideOfferId, CreateRideOfferRequest request, CancellationToken cancellationToken)
     {
@@ -930,6 +986,43 @@ public sealed class RideService : IRideService
             ride.CompletedAtUtc,
             ride.CancelledAtUtc,
             ride.CancellationReason);
+
+
+    private static SharedRideDto MapSharedRide(RideOffer ride)
+    {
+        return new SharedRideDto(
+            ride.Id,
+            ride.Driver?.FullName ?? "",
+            new GeoPointDto(
+                ride.OriginName,
+                ride.OriginLatitude,
+                ride.OriginLongitude,
+                ride.OriginAddress),
+
+            new GeoPointDto(
+                ride.DestinationName,
+                ride.DestinationLatitude,
+                ride.DestinationLongitude,
+                ride.DestinationAddress),
+
+            ride.IntermediateStops
+                .OrderBy(x => x.StopOrder)
+                .Select(x => new RideStopDto(
+                    x.Name,
+                    x.Address,
+                    x.Latitude,
+                    x.Longitude,
+                    x.StopOrder))
+                .ToList(),
+
+            ride.DepartureTimeUtc,
+            ride.AvailableSeats,
+            ride.PricePerSeat,
+            ride.VehicleName,
+            ride.VehicleNumber,
+            ride.Status
+        );
+    }
 
     private static IQueryable<RideOfferDto> ProjectRideCards(IQueryable<RideOffer> query) =>
         query.Select(ride => new RideOfferDto(

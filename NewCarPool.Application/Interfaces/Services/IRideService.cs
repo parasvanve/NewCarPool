@@ -1,6 +1,7 @@
 using NewCarPool.Application.Common;
 using NewCarPool.Application.DTOs.Rides;
 
+
 namespace NewCarPool.Application.Interfaces.Services;
 
 public interface IRideService
@@ -20,4 +21,15 @@ public interface IRideService
     Task<RideChatMessageDto> UploadChatAttachmentAsync(Guid rideOfferId, Guid userId, ChatAttachmentUpload upload, CancellationToken cancellationToken);
     Task<RideOfferDto> StartRideAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken);
     Task<RideOfferDto> CompleteRideAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken);
+
+    //Task<SharedRideDto?> GetSharedRideAsync(Guid rideId);
+
+    Task<SharedRideDto> GetSharedRideAsync(
+     Guid rideId,
+     CancellationToken cancellationToken);
+
+
+    Task<RideShareResponseDto> GetRideShareDataAsync(
+    Guid rideId,
+    CancellationToken cancellationToken);
 }

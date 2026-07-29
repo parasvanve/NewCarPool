@@ -1,6 +1,7 @@
 import '../core/network/api_client.dart';
 import '../models/booking_models.dart';
 import '../models/ride_models.dart';
+import '../models/ride_share_response.dart';
 
 class RideService {
   RideService(this._apiClient);
@@ -26,26 +27,37 @@ class RideService {
       query['departureDateUtc'] = departureDateUtc.toIso8601String();
     }
 
-    final response = await _apiClient.dio.get('/rides/search', queryParameters: query);
+    final response =
+        await _apiClient.dio.get('/rides/search', queryParameters: query);
     final items = response.data['items'] as List<dynamic>;
-    return items.map((x) => RideOffer.fromJson(Map<String, dynamic>.from(x as Map))).toList();
+    return items
+        .map((x) => RideOffer.fromJson(Map<String, dynamic>.from(x as Map)))
+        .toList();
   }
 
   Future<List<RideOffer>> upcomingActiveRides() async {
     final response = await _apiClient.dio.get('/rides/upcoming-active');
     final items = response.data as List<dynamic>;
-    return items.map((x) => RideOffer.fromJson(Map<String, dynamic>.from(x as Map))).toList();
+    return items
+        .map((x) => RideOffer.fromJson(Map<String, dynamic>.from(x as Map)))
+        .toList();
   }
 
   Future<List<RideOffer>> myRides() async {
     final response = await _apiClient.dio.get('/rides/mine');
     final items = response.data as List<dynamic>;
-    return items.map((x) => RideOffer.fromJson(Map<String, dynamic>.from(x as Map))).toList();
+    return items
+        .map((x) => RideOffer.fromJson(Map<String, dynamic>.from(x as Map)))
+        .toList();
   }
 
   Future<RideOffer> details(String rideOfferId) async {
     final response = await _apiClient.dio.get('/rides/$rideOfferId');
     return RideOffer.fromJson(Map<String, dynamic>.from(response.data as Map));
+  }
+
+  Future<RideOffer> getRideById(String rideId) {
+    return details(rideId);
   }
 
   Future<RideOffer> offerRide({
@@ -94,10 +106,12 @@ class RideService {
   }
 
   Future<List<RideBooking>> participants(String rideOfferId) async {
-    final response = await _apiClient.dio.get('/rides/$rideOfferId/participants');
+    final response =
+        await _apiClient.dio.get('/rides/$rideOfferId/participants');
     final items = response.data as List<dynamic>;
     return items
-        .map((item) => RideBooking.fromJson(Map<String, dynamic>.from(item as Map)))
+        .map((item) =>
+            RideBooking.fromJson(Map<String, dynamic>.from(item as Map)))
         .toList();
   }
 
@@ -109,6 +123,12 @@ class RideService {
   Future<RideOffer> completeRide(String rideOfferId) async {
     final response = await _apiClient.dio.post('/rides/$rideOfferId/complete');
     return RideOffer.fromJson(Map<String, dynamic>.from(response.data));
+  }
+
+  Future<RideShareResponse> getRideShare(String rideId) async {
+    final response = await _apiClient.dio.get('/rides/$rideId/share');
+
+    return RideShareResponse.fromJson(Map<String, dynamic>.from(response.data));
   }
 
   Future<RideOffer> cancelRide(String rideOfferId, {String? reason}) async {

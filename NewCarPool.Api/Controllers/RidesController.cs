@@ -151,6 +151,33 @@ public sealed class RidesController : ControllerBase
         return Ok(ride);
     }
 
+
+    [AllowAnonymous]
+    [HttpGet("share/{rideId:guid}")]
+    public async Task<IActionResult> GetSharedRide(
+    Guid rideId,
+    CancellationToken cancellationToken)
+    {
+        var ride = await _rideService.GetSharedRideAsync(
+            rideId,
+            cancellationToken);
+
+        return Ok(ride);
+    }
+
+
+    [HttpGet("{rideId:guid}/share")]
+    public async Task<ActionResult<RideShareResponseDto>> ShareRide(
+    Guid rideId,
+    CancellationToken cancellationToken)
+    {
+        var result = await _rideService.GetRideShareDataAsync(
+            rideId,
+            cancellationToken);
+
+        return Ok(result);
+    }
+
     [HttpPost("bookings/{bookingId:guid}/cancel")]
     public async Task<ActionResult<RideBookingDto>> CancelBooking(
         Guid bookingId,
@@ -158,6 +185,8 @@ public sealed class RidesController : ControllerBase
         CancellationToken cancellationToken) =>
         Ok(await _bookingService.CancelAsync(User.GetUserId(), bookingId, request?.Reason, cancellationToken));
 }
+
+
 
 public sealed class RideChatAttachmentUploadRequest
 {

@@ -14,7 +14,7 @@ class AuthValidators {
 
     final email = value!.trim();
     if (!email.contains('@') || !email.contains('.')) {
-      return 'Enter a valid email address';
+      return 'Enter a valid email'; // ✅ matches test expectation now
     }
     return null;
   }

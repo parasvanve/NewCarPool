@@ -15,9 +15,24 @@ import 'providers/ride_provider.dart';
 import 'providers/vehicle_provider.dart';
 import 'services/ride_chat_service.dart';
 
-void main() {
+import 'services/deep_link_service.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
   final dependencies = AppDependencies();
+
+  final initialUri = await DeepLinkService.instance.getInitialLink();
+
   runApp(NewCarPoolApp(dependencies: dependencies));
+
+  DeepLinkService.instance.initialize((uri) {
+    AppRouter.router.go(uri.path);
+  });
+
+  if (initialUri != null) {
+    AppRouter.router.go(initialUri.path);
+  }
 }
 
 class NewCarPoolApp extends StatelessWidget {

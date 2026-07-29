@@ -40,7 +40,7 @@ class HelpSupportScreen extends StatelessWidget {
                 child: ListTile(
                   leading: const Icon(Icons.email_outlined),
                   title: const Text('Contact Support'),
-                  subtitle: const Text('support@newcarpool.com'),
+                  subtitle: const Text('support@carpool.com'),
                   trailing: const Icon(Icons.chevron_right),
                 ),
               ),

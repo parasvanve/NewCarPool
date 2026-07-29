@@ -5,6 +5,7 @@ using NewCarPool.Api.Hubs;
 using NewCarPool.Api.Middleware;
 using NewCarPool.Infrastructure;
 using NewCarPool.Infrastructure.Hubs;
+using NewCarPool.Application.Common;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -74,6 +75,9 @@ builder.Services.AddSwaggerGen(options =>
         }
     });
 });
+
+builder.Services.Configure<AppSettingsOptions>(
+    builder.Configuration.GetSection(AppSettingsOptions.SectionName));
 
 var app = builder.Build();
 

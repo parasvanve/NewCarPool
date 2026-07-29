@@ -18,4 +18,6 @@ class AppRoutes {
   static const driverRequests = '/driver-requests';
   static const tracking = '/tracking';
   static const rideDetails = '/ride-details';
+
+  static const sharedRide = '/rides/:rideId';
 }

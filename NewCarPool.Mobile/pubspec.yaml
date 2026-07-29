@@ -1,5 +1,5 @@
 name: new_car_pool
-description: NewCarPool mobile application built with Flutter, Provider, Dio, Flutter Map, SignalR, and JWT authentication.
+description: CarPool mobile application built with Flutter, Provider, Dio, Flutter Map, SignalR, and JWT authentication.
 publish_to: "none"
 version: 1.0.0+1
 
@@ -24,6 +24,8 @@ dependencies:
   permission_handler: ^11.3.1
   url_launcher: ^6.3.1
   cupertino_icons: ^1.0.8
+  share_plus: ^10.0.2
+  app_links: ^6.4.0
 
 dev_dependencies:
   flutter_test:
@@ -47,3 +49,6 @@ flutter_launcher_icons:
 
 flutter:
   uses-material-design: true
+
+
+  

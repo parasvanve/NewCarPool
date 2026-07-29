@@ -11,7 +11,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('NewCarPool'),
+        title: const Text('CarPool'),
         actions: [
           IconButton(
             onPressed: () => context.read<AuthProvider>().logout(),

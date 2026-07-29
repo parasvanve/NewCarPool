@@ -1,6 +1,7 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/constants/app_routes.dart';
 import '../../core/utils/departure_time_utils.dart';
@@ -90,7 +91,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 1100;
     final pages = [
-      const _HomePage(),
+      _HomePage(onProfileTap: () => setState(() => _index = 3)),
       const TripsScreen(showAppBar: false),
       const NotificationScreen(showAppBar: false),
       const ProfileScreen(showAppBar: false),
@@ -130,6 +131,17 @@ class _DesktopSidebar extends StatelessWidget {
   final int index;
   final ValueChanged<int> onChanged;
 
+  Future<void> _callSupport(BuildContext context) async {
+    const phoneNumber = '+919301953328'; // replace with your actual number
+    final uri = Uri(scheme: 'tel', path: phoneNumber);
+    final launched = await launchUrl(uri);
+    if (!launched && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open dialer')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = [
@@ -162,7 +174,7 @@ class _DesktopSidebar extends StatelessWidget {
                     color: AppDesignTokens.brandStart),
               ),
               SizedBox(width: 10),
-              Text('NewCarPool',
+              Text('CarPool',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             ],
           ),
@@ -205,22 +217,62 @@ class _DesktopSidebar extends StatelessWidget {
                 ),
               ),
           const Spacer(),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFF),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Need Help?',
-                    style: TextStyle(fontWeight: FontWeight.w700)),
-                SizedBox(height: 4),
-                Text('Contact support 24/7 for booking and trip help.',
-                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-              ],
+          InkWell(
+            onTap: () => _callSupport(context),
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFF),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE7EAFE),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.support_agent,
+                        size: 18, color: AppDesignTokens.brandStart),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Need Help?',
+                            style: TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 4),
+                        const Text(
+                            'Contact support 24/7 for booking and trip help.',
+                            style: TextStyle(
+                                fontSize: 12, color: Color(0xFF64748B))),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: const [
+                            Icon(Icons.call,
+                                size: 14, color: AppDesignTokens.brandStart),
+                            SizedBox(width: 4),
+                            Text(
+                              '+91 9301953328',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                                color: AppDesignTokens.brandStart,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
@@ -230,7 +282,8 @@ class _DesktopSidebar extends StatelessWidget {
 }
 
 class _HomePage extends StatelessWidget {
-  const _HomePage();
+  const _HomePage({required this.onProfileTap});
+  final VoidCallback onProfileTap;
 
   @override
   Widget build(BuildContext context) {
@@ -275,7 +328,7 @@ class _HomePage extends StatelessWidget {
     final leftContent = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _TopHomeBar(unreadCount: unreadCount),
+        _TopHomeBar(unreadCount: unreadCount, onProfileTap: onProfileTap),
         const SizedBox(height: 12),
         _GreetingCard(firstName: firstName),
         const SizedBox(height: 12),
@@ -308,7 +361,7 @@ class _HomePage extends StatelessWidget {
                       borderRadius: BorderRadius.circular(16)),
                 ),
                 icon: const Icon(Icons.local_taxi_outlined),
-                label: const Text('Offer Ride'),
+                label: const Text('Offer & Create Ride'),
               ),
             ),
           ],
@@ -380,9 +433,10 @@ class _HomePage extends StatelessWidget {
 }
 
 class _TopHomeBar extends StatelessWidget {
-  const _TopHomeBar({required this.unreadCount});
+  const _TopHomeBar({required this.unreadCount, required this.onProfileTap});
 
   final int unreadCount;
+  final VoidCallback onProfileTap;
 
   @override
   Widget build(BuildContext context) {
@@ -419,7 +473,12 @@ class _TopHomeBar extends StatelessWidget {
             ],
           ),
         ),
-        const CircleAvatar(radius: 16, child: Icon(Icons.person, size: 18)),
+        InkWell(
+          onTap: onProfileTap,
+          customBorder: const CircleBorder(),
+          child: const CircleAvatar(
+              radius: 16, child: Icon(Icons.person, size: 18)),
+        ),
       ],
     );
   }
@@ -467,7 +526,7 @@ class _GreetingCard extends StatelessWidget {
             ),
           ),
           const Icon(Icons.directions_car_filled,
-              color: Colors.white70, size: 50),
+              color: Colors.white, size: 50),
         ],
       ),
     );
@@ -667,7 +726,7 @@ class _WhyNewCarpoolCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Why NewCarPool?',
+            const Text('Why CarPool?',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             if (isMobile)

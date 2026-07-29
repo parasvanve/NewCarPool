@@ -30,7 +30,6 @@ class ApiClient {
           } catch (e) {
             parsedException = 'Request failed: ${error.message}';
           }
-
           // FIX: copyWith ka sahi use, jisme Object parameter pass ho raha hai bina setter error ke
           handler.reject(error.copyWith(error: parsedException));
           return;

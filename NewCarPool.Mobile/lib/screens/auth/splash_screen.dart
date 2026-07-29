@@ -22,9 +22,9 @@ class _SplashScreenState extends State<SplashScreen> {
 
   Future<void> _routeNext() async {
     await Future.delayed(const Duration(milliseconds: 700));
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
+
+    context.go(AppRoutes.login);
 
     final authProvider = context.read<AuthProvider>();
     final hasStoredSession = await authProvider.restoreSessionFromStorage();
@@ -66,7 +66,8 @@ class _SplashScreenState extends State<SplashScreen> {
               child: const Icon(Icons.route, color: Colors.white, size: 34),
             ),
             const SizedBox(height: 16),
-            const Text(AppConstants.appName, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
+            const Text(AppConstants.appName,
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             const SizedBox(width: 120, child: LinearProgressIndicator()),
           ],

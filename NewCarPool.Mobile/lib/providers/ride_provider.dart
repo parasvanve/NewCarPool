@@ -8,6 +8,7 @@ import '../core/network/token_store.dart';
 import '../models/ride_models.dart';
 import '../models/booking_models.dart';
 import '../services/ride_service.dart';
+import '../models/ride_share_response.dart';
 
 class RideProvider extends ChangeNotifier {
   RideProvider(this._rideService, this._tokenStore);
@@ -290,6 +291,14 @@ class RideProvider extends ChangeNotifier {
   Future<void> disconnectRealtime() async {
     await _realtimeConnection?.stop();
     _realtimeConnection = null;
+  }
+
+  Future<RideShareResponse> getRideShare(String rideId) {
+    return _rideService.getRideShare(rideId);
+  }
+
+  Future<RideOffer> getRideById(String rideId) {
+    return _rideService.details(rideId);
   }
 
   void startUpcomingAutoRefresh(

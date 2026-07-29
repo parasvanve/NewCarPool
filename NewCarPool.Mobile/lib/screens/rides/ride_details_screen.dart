@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -17,10 +17,18 @@ import '../../providers/booking_provider.dart';
 import '../../services/ride_service.dart';
 import '../../services/tracking_service.dart';
 import 'ride_chat_screen.dart';
+import '../../providers/ride_provider.dart';
+import '../../services/share_service.dart';
 
 class RideDetailsScreen extends StatefulWidget {
-  const RideDetailsScreen({super.key, this.extra});
+  const RideDetailsScreen({
+    super.key,
+    this.extra,
+    this.rideId,
+  });
+
   final Object? extra;
+  final String? rideId;
 
   @override
   State<RideDetailsScreen> createState() => _RideDetailsScreenState();
@@ -43,24 +51,95 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     LocationPermissionHelper.indoreLongitude,
   );
 
+  // New: covers the brief async setup (marker icons, fallback location,
+  // booking history, camera fit, tracking sync) with a shimmer instead of
+  // flashing content or the "unavailable" message.
+  bool _detailsLoading = true;
+
+  // @override
+  // void initState() {
+  //   super.initState();
+  // Extract the ride synchronously — widget.extra is already available
+  // right away, no need to wait for a post-frame callback to read it.
+  // _ride = widget.extra is RideOffer ? widget.extra as RideOffer : null;
+  // if (widget.extra is RideOffer) {
+  //     _ride = widget.extra as RideOffer;
+  // } else if (widget.rideId != null) {
+  //  _loadRideFromApi(widget.rideId!);
+  // }
+
+  //   WidgetsBinding.instance.addPostFrameCallback((_) async {
+  //     final ride = _ride;
+  //     if (ride == null) {
+  //       // Genuinely nothing to show — stop "loading" and let build()
+  //       // render the unavailable state.
+  //       if (mounted) setState(() => _detailsLoading = false);
+  //       return;
+  //     }
+
+  //     final bookingProvider = context.read<BookingProvider>();
+  //     await _prepareMarkerIcons();
+  //     await _initializeFallbackMapCenter();
+  //     if (!mounted) return;
+  //     if (bookingProvider.bookings.isEmpty && !bookingProvider.isLoading) {
+  //       await bookingProvider.loadHistory();
+  //     }
+  //     if (!mounted) return;
+
+  //     await _fitCamera();
+  //     await _syncTracking(ride);
+  //     if (!mounted) return;
+  //     setState(() => _detailsLoading = false);
+  //   });
+  // }
+
   @override
   void initState() {
     super.initState();
+
+    if (widget.extra is RideOffer) {
+      _ride = widget.extra as RideOffer;
+    } else if (widget.rideId != null) {
+      _loadRideFromApi(widget.rideId!);
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (_ride == null && widget.rideId != null) {
+        await _loadRideFromApi(widget.rideId!);
+      }
+
+      final ride = _ride;
+
+      if (ride == null) {
+        if (mounted) {
+          setState(() => _detailsLoading = false);
+        }
+        return;
+      }
+
       final bookingProvider = context.read<BookingProvider>();
+
       await _prepareMarkerIcons();
       await _initializeFallbackMapCenter();
+
       if (!mounted) return;
+
       if (bookingProvider.bookings.isEmpty && !bookingProvider.isLoading) {
         await bookingProvider.loadHistory();
       }
-      final ride = widget.extra is RideOffer ? widget.extra as RideOffer : null;
-      if (ride == null) return;
-      setState(() => _ride = ride);
+
+      if (!mounted) return;
+
       await _fitCamera();
       await _syncTracking(ride);
-    });
-  }
+
+      if (!mounted) return;
+
+      setState(() {
+        _detailsLoading = false;
+      });
+    }); // <-- closes addPostFrameCallback
+  } // <-- closes initState
 
   Future<void> _initializeFallbackMapCenter() async {
     final location = await LocationPermissionHelper.currentOrFallback();
@@ -68,6 +147,48 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     setState(() {
       _fallbackMapCenter = gmap.LatLng(location.latitude, location.longitude);
     });
+  }
+
+  Future<void> _loadRideFromApi(String rideId) async {
+    try {
+      final ride = await context.read<RideProvider>().getRideById(rideId);
+
+      if (!mounted) return;
+
+      setState(() {
+        _ride = ride;
+      });
+
+      final bookingProvider = context.read<BookingProvider>();
+
+      await _prepareMarkerIcons();
+      await _initializeFallbackMapCenter();
+
+      if (bookingProvider.bookings.isEmpty && !bookingProvider.isLoading) {
+        await bookingProvider.loadHistory();
+      }
+
+      await _fitCamera();
+      await _syncTracking(ride);
+
+      if (!mounted) return;
+
+      setState(() {
+        _detailsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _detailsLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Unable to load ride."),
+        ),
+      );
+    }
   }
 
   Future<void> _prepareMarkerIcons() async {
@@ -383,20 +504,59 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     }
   }
 
+  Future<void> _shareRide() async {
+    if (_ride == null) return;
+
+    try {
+      final shareData =
+          await context.read<RideProvider>().getRideShare(_ride!.id);
+
+      await ShareService.shareRide(shareData);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Unable to share ride.\n$e'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ride = _ride;
+
     if (ride == null) {
+      // Only reached when there genuinely is no ride data — never as a
+      // loading flash, since _ride is now set synchronously in initState.
       return const Scaffold(
           body: Center(child: Text('Ride details unavailable')));
     }
+
+    final isDesktop = MediaQuery.of(context).size.width >= 1100;
+
+    if (_detailsLoading) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF7F8FC),
+        appBar: AppBar(
+          leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.of(context).maybePop()),
+          title: const Text('Ride Details'),
+        ),
+        body: SafeArea(
+          child: _ShimmerRideDetails(isDesktop: isDesktop),
+        ),
+      );
+    }
+
     final myUserId = context.watch<AuthProvider>().session?.userId;
     final isDriver = myUserId != null && ride.driverId == myUserId;
     final isStarted = ride.status == 3;
     final myBooking = _latestBooking(ride.id);
     final distanceKm = _driverDistanceKm(myBooking);
     final etaMin = _etaMinutes(myBooking);
-    final isDesktop = MediaQuery.of(context).size.width >= 1100;
 
     final markers = _buildMarkers(ride);
 
@@ -418,6 +578,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
         await c.animateCamera(
             gmap.CameraUpdate.newLatLngZoom(_driverLivePoint ?? fallback, 14));
       },
+      onShare: _shareRide,
     );
 
     final rightPanel = _RightPanel(
@@ -439,13 +600,13 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Ride Details'),
-            Text(
-              'Ride ID: #${ride.id.substring(0, 8).toUpperCase()}',
-              style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF6B7280),
-                  fontWeight: FontWeight.w500),
-            ),
+            // Text(
+            //   'Ride ID: #${ride.id.substring(0, 8).toUpperCase()}',
+            //   style: const TextStyle(
+            //       fontSize: 13,
+            //       color: Color(0xFF6B7280),
+            //       fontWeight: FontWeight.w500),
+            // ),
           ],
         ),
         actions: [
@@ -456,7 +617,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                 children: [
                   Icon(Icons.flutter_dash, color: Color(0xFF4F46E5)),
                   SizedBox(width: 6),
-                  Text('NewCarPool',
+                  Text('CarPool',
                       style: TextStyle(
                           fontWeight: FontWeight.w700,
                           color: Color(0xFF1D4ED8))),
@@ -511,6 +672,14 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                                   },
                                   icon: const Icon(Icons.map_outlined),
                                   label: const Text('View on Map'),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: _shareRide,
+                                  icon: const Icon(Icons.share_outlined),
+                                  label: const Text('Share Ride'),
                                 ),
                               ),
                               if (isDriver && isStarted) ...[
@@ -614,6 +783,14 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                           : 'View on Map'),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: FilledButton.icon(
+                      onPressed: _shareRide,
+                      icon: const Icon(Icons.share),
+                      label: const Text('Share'),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -703,6 +880,190 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
   }
 }
 
+// ============================================================
+// Shimmer loading skeleton — shown only while marker icons,
+// fallback location, booking history, and tracking sync resolve.
+// ============================================================
+
+class _ShimmerRideDetails extends StatelessWidget {
+  const _ShimmerRideDetails({required this.isDesktop});
+
+  final bool isDesktop;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isDesktop) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 8,
+              child: Column(
+                children: const [
+                  Expanded(child: _Shimmer(child: _ShimmerBox(radius: 18))),
+                  SizedBox(height: 10),
+                  _Shimmer(child: _ShimmerBox(height: 80, radius: 16)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              flex: 5,
+              child: ListView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                children: const [
+                  _ShimmerDetailsCard(),
+                  _ShimmerDetailsCard(lines: 2),
+                  _ShimmerDetailsCard(lines: 4),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        const SizedBox(
+          height: 360,
+          child: _Shimmer(child: _ShimmerBox(radius: 18)),
+        ),
+        Expanded(
+          child: Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            ),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(12, 16, 12, 24),
+              children: const [
+                _ShimmerDetailsCard(),
+                _ShimmerDetailsCard(lines: 2),
+                _ShimmerDetailsCard(lines: 4),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ShimmerDetailsCard extends StatelessWidget {
+  const _ShimmerDetailsCard({this.lines = 3});
+
+  final int lines;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE5E7EB)),
+      ),
+      child: _Shimmer(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _ShimmerBox(width: 140, height: 20, radius: 6),
+            const SizedBox(height: 14),
+            for (var i = 0; i < lines; i++) ...[
+              _ShimmerBox(
+                  width: i.isEven ? double.infinity : 200,
+                  height: 14,
+                  radius: 6),
+              const SizedBox(height: 10),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ShimmerBox extends StatelessWidget {
+  const _ShimmerBox({
+    this.width,
+    this.height = 14,
+    this.radius = 8,
+  });
+
+  final double? width;
+  final double height;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width ?? double.infinity,
+      height: height,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE2E8F0),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
+  }
+}
+
+/// Lightweight shimmer sweep effect with no external dependency.
+class _Shimmer extends StatefulWidget {
+  const _Shimmer({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_Shimmer> createState() => _ShimmerState();
+}
+
+class _ShimmerState extends State<_Shimmer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return ShaderMask(
+          shaderCallback: (bounds) {
+            final t = _controller.value;
+            return LinearGradient(
+              colors: const [
+                Color(0xFFE2E8F0),
+                Color(0xFFF8FAFC),
+                Color(0xFFE2E8F0),
+              ],
+              stops: const [0.35, 0.5, 0.65],
+              begin: Alignment(-1 - t * 2, 0),
+              end: Alignment(1 - t * 2, 0),
+            ).createShader(bounds);
+          },
+          blendMode: BlendMode.srcATop,
+          child: child,
+        );
+      },
+      child: widget.child,
+    );
+  }
+}
+
 class _MapCard extends StatelessWidget {
   const _MapCard({
     required this.ride,
@@ -716,8 +1077,10 @@ class _MapCard extends StatelessWidget {
     required this.onUserMove,
     required this.fallbackCenter,
     required this.onMyLocation,
+    required this.onShare,
   });
 
+  final VoidCallback onShare;
   final RideOffer ride;
   final bool isStarted;
   final String? trackingMessage;
@@ -799,7 +1162,7 @@ class _MapCard extends StatelessWidget {
                   right: 14,
                   top: 14,
                   child: FilledButton.tonalIcon(
-                    onPressed: () {},
+                    onPressed: onShare,
                     icon: const Icon(Icons.share_outlined),
                     label: const Text('Share Live Trip'),
                   ),
@@ -947,7 +1310,7 @@ class _RightPanel extends StatelessWidget {
                   'Date & Time',
                   DepartureTimeUtils.formatFriendly(ride.departureTimeUtc,
                       context: 'Ride Details Summary')),
-              _KVRow('Seat(s) Booked', '${myBooking?.seatsBooked ?? 1} Seat'),
+              _KVRow('Seats Booked', '${myBooking?.seatsBooked ?? 1} Seat'),
               _KVRow('Booking Status', _statusLabel(ride.status)),
             ],
           ),
@@ -1101,7 +1464,9 @@ class _KVRow extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-              child: Text(k, style: const TextStyle(color: Color(0xFF6B7280)))),
+              child: Text(k,
+                  style: const TextStyle(
+                      color: Color(0xFF6B7280), fontWeight: FontWeight.w700))),
           Text(v, style: const TextStyle(fontWeight: FontWeight.w700)),
         ],
       ),

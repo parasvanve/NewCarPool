@@ -36,10 +36,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
-    final resetToken = auth.lastResetToken;
     return AuthShell(
       title: 'Reset password',
-      subtitle: _tokenRequested ? 'Enter the reset token and choose a new password.' : 'We will generate a reset token for your account.',
+      subtitle: _tokenRequested
+          ? 'Enter the reset token and choose a new password.'
+          : 'We will generate a reset token for your account.',
       children: [
         Form(
           key: _formKey,
@@ -49,15 +50,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               TextFormField(
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
+                decoration: const InputDecoration(
+                    labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
                 validator: AuthValidators.email,
               ),
               if (_tokenRequested) ...[
                 const SizedBox(height: 14),
                 TextFormField(
                   controller: _resetToken,
-                  decoration: const InputDecoration(labelText: 'Reset token', prefixIcon: Icon(Icons.key_outlined)),
-                  validator: (value) => AuthValidators.requiredText(value, 'Reset token'),
+                  decoration: const InputDecoration(
+                      labelText: 'Reset token',
+                      prefixIcon: Icon(Icons.key_outlined)),
+                  validator: (value) =>
+                      AuthValidators.requiredText(value, 'Reset token'),
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
@@ -67,27 +72,31 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                     labelText: 'New password',
                     prefixIcon: const Icon(Icons.lock_reset_outlined),
                     suffixIcon: IconButton(
-                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                      icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                      onPressed: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
+                      icon: Icon(_obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined),
                     ),
                   ),
                   validator: AuthValidators.password,
                 ),
               ],
-              if (resetToken != null && resetToken.isNotEmpty) ...[
-                const SizedBox(height: 14),
-                SelectableText('Development reset token: $resetToken'),
-              ],
               const SizedBox(height: 20),
               LoadingButton(
                 isLoading: auth.isLoading,
                 label: _tokenRequested ? 'Reset password' : 'Get reset token',
-                icon: _tokenRequested ? Icons.lock_reset : Icons.mark_email_read_outlined,
-                onPressed: () => _tokenRequested ? _resetPassword(context) : _requestToken(context),
+                icon: _tokenRequested
+                    ? Icons.lock_reset
+                    : Icons.mark_email_read_outlined,
+                onPressed: () => _tokenRequested
+                    ? _resetPassword(context)
+                    : _requestToken(context),
               ),
               const SizedBox(height: 12),
               TextButton(
-                onPressed: auth.isLoading ? null : () => context.go(AppRoutes.login),
+                onPressed:
+                    auth.isLoading ? null : () => context.go(AppRoutes.login),
                 child: const Text('Back to sign in'),
               ),
             ],
@@ -103,15 +112,25 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
 
     try {
-      await context.read<AuthProvider>().forgotPassword(_email.text.trim());
+      final auth = context.read<AuthProvider>();
+      await auth.forgotPassword(_email.text.trim());
       if (context.mounted) {
+        // Auto-fill the reset token field instead of displaying it separately.
+        final token = auth.lastResetToken;
+        if (token != null && token.isNotEmpty) {
+          _resetToken.text = token;
+        }
         setState(() => _tokenRequested = true);
         AppSnackBar.showSuccess(context, 'Reset token generated.');
       }
     } on DioException catch (exception) {
       final error = exception.error;
       if (context.mounted) {
-        AppSnackBar.showError(context, error is AppException ? error.message : 'Could not generate reset token');
+        AppSnackBar.showError(
+            context,
+            error is AppException
+                ? error.message
+                : 'Could not generate reset token');
       }
     }
   }
@@ -134,7 +153,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     } on DioException catch (exception) {
       final error = exception.error;
       if (context.mounted) {
-        AppSnackBar.showError(context, error is AppException ? error.message : 'Could not reset password');
+        AppSnackBar.showError(context,
+            error is AppException ? error.message : 'Could not reset password');
       }
     }
   }
