@@ -1,0 +1,40 @@
+name: Deploy Flutter Web to Azure App Service
+
+on:
+  push:
+    branches: [ master ]
+    paths:
+      - 'NewCarPool.Mobile/**'   # only run when mobile app code changes
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: NewCarPool.Mobile
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Enable web (safety check)
+        run: flutter config --enable-web
+
+      - name: Build web release
+        run: flutter build web --release
+
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'CarPool-Web'
+          publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+          package: NewCarPool.Mobile/build/web
