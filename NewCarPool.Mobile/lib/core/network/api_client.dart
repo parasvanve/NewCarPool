@@ -6,7 +6,7 @@ import 'token_store.dart';
 class ApiClient {
   ApiClient(this._tokenStore) {
     dio = Dio(BaseOptions(
-      baseUrl: '${AppConfig.apiBaseUrl}/api',
+      baseUrl: '${AppConfig.apiBaseUrl}/',
       connectTimeout: const Duration(seconds: 20),
       receiveTimeout: const Duration(seconds: 20),
       headers: {'Content-Type': 'application/json'},
