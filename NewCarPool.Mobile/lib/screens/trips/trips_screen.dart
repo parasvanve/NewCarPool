@@ -1,4 +1,4 @@
-import 'package:dio/dio.dart';
+﻿import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -32,6 +32,10 @@ class _TripsScreenState extends State<TripsScreen> {
   String? _bookingRideId;
   final Map<String, RideOffer> _bookingRideDetails = {};
 
+  // New: tracks the very first data load so we can show a shimmer skeleton
+  // instead of briefly flashing "No rides available" before data arrives.
+  bool _initialLoading = true;
+
   @override
   void initState() {
     super.initState();
@@ -42,6 +46,7 @@ class _TripsScreenState extends State<TripsScreen> {
         await rideProvider.connectRealtime(userId: userId);
       }
       await _refreshAll();
+      if (mounted) setState(() => _initialLoading = false);
     });
   }
 
@@ -289,10 +294,8 @@ class _TripsScreenState extends State<TripsScreen> {
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _refreshAll,
-                  child: rideProvider.isLoading &&
-                          rideProvider.rides.isEmpty &&
-                          rideProvider.myRides.isEmpty
-                      ? const Center(child: CircularProgressIndicator())
+                  child: _initialLoading
+                      ? const _ShimmerTripList()
                       : _tab == 0
                           ? _UpcomingTab(
                               myOfferedUpcoming: myOfferedUpcoming,
@@ -408,6 +411,179 @@ class _TripsScreenState extends State<TripsScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ============================================================
+// Shimmer loading skeleton — shown only during the initial load
+// ============================================================
+
+class _ShimmerTripList extends StatelessWidget {
+  const _ShimmerTripList();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+      children: const [
+        _ShimmerSectionHeader(),
+        _ShimmerRideCard(),
+        _ShimmerRideCard(),
+        SizedBox(height: 8),
+        _ShimmerSectionHeader(),
+        _ShimmerRideCard(),
+      ],
+    );
+  }
+}
+
+class _ShimmerSectionHeader extends StatelessWidget {
+  const _ShimmerSectionHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(2, 6, 2, 10),
+      child: _Shimmer(
+        child: _ShimmerBox(width: 160, height: 16, radius: 6),
+      ),
+    );
+  }
+}
+
+class _ShimmerRideCard extends StatelessWidget {
+  const _ShimmerRideCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 1.5,
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: _Shimmer(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: _ShimmerBox(height: 22, radius: 6),
+                  ),
+                  SizedBox(width: 10),
+                  _ShimmerBox(width: 70, height: 24, radius: 14),
+                ],
+              ),
+              SizedBox(height: 12),
+              Row(
+                children: [
+                  _ShimmerBox(width: 100, height: 14, radius: 6),
+                  SizedBox(width: 12),
+                  Expanded(child: _ShimmerBox(height: 14, radius: 6)),
+                ],
+              ),
+              SizedBox(height: 12),
+              _ShimmerBox(height: 90, radius: 16),
+              SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(child: _ShimmerBox(height: 14, radius: 6)),
+                  SizedBox(width: 10),
+                  Expanded(child: _ShimmerBox(height: 14, radius: 6)),
+                  SizedBox(width: 10),
+                  Expanded(child: _ShimmerBox(height: 14, radius: 6)),
+                ],
+              ),
+              SizedBox(height: 14),
+              Row(
+                children: [
+                  _ShimmerBox(width: 120, height: 36, radius: 10),
+                  SizedBox(width: 8),
+                  _ShimmerBox(width: 100, height: 36, radius: 10),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ShimmerBox extends StatelessWidget {
+  const _ShimmerBox({
+    this.width,
+    required this.height,
+    this.radius = 8,
+  });
+
+  final double? width;
+  final double height;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE2E8F0),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
+  }
+}
+
+/// Lightweight shimmer sweep effect with no external dependency.
+class _Shimmer extends StatefulWidget {
+  const _Shimmer({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_Shimmer> createState() => _ShimmerState();
+}
+
+class _ShimmerState extends State<_Shimmer>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return ShaderMask(
+          shaderCallback: (bounds) {
+            final t = _controller.value;
+            return LinearGradient(
+              colors: const [
+                Color(0xFFE2E8F0),
+                Color(0xFFF8FAFC),
+                Color(0xFFE2E8F0),
+              ],
+              stops: const [0.35, 0.5, 0.65],
+              begin: Alignment(-1 - t * 2, 0),
+              end: Alignment(1 - t * 2, 0),
+            ).createShader(bounds);
+          },
+          blendMode: BlendMode.srcATop,
+          child: child,
+        );
+      },
+      child: widget.child,
     );
   }
 }

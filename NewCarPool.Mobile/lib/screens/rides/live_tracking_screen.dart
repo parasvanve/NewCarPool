@@ -29,6 +29,10 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   bool autoFollow = true;
   double _mapZoom = 13;
 
+  // New: tracks whether we're still resolving the initial map center,
+  // so we can show a loading indicator instead of appearing frozen.
+  bool _isLocating = true;
+
   @override
   void initState() {
     super.initState();
@@ -36,23 +40,46 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
   }
 
   Future<void> _initializeMapCenter() async {
-    final location = await LocationPermissionHelper.currentOrFallback();
-    if (!mounted) return;
-    final next = LatLng(location.latitude, location.longitude);
-    setState(() => driverLocation = next);
-    if (location.message != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(location.message!)),
-      );
-    }
-    if (_mapController.isCompleted) {
-      final controller = await _mapController.future;
-      await controller.animateCamera(
-        gmap.CameraUpdate.newLatLngZoom(
-          gmap.LatLng(next.latitude, next.longitude),
-          14,
-        ),
-      );
+    if (mounted) setState(() => _isLocating = true);
+    try {
+      // Guard against a hanging permission/location call so the screen
+      // never looks frozen — fall back to the default location instead.
+      final location = await LocationPermissionHelper.currentOrFallback()
+          .timeout(const Duration(seconds: 8));
+      if (!mounted) return;
+      final next = LatLng(location.latitude, location.longitude);
+      setState(() => driverLocation = next);
+      if (location.message != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(location.message!)),
+        );
+      }
+      if (_mapController.isCompleted) {
+        final controller = await _mapController.future;
+        await controller.animateCamera(
+          gmap.CameraUpdate.newLatLngZoom(
+            gmap.LatLng(next.latitude, next.longitude),
+            14,
+          ),
+        );
+      }
+    } on TimeoutException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content:
+                  Text('Could not fetch your location, showing default area.')),
+        );
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+              content: Text('Location unavailable, showing default area.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLocating = false);
     }
   }
 
@@ -146,6 +173,37 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
               onChanged: (value) => setState(() => autoFollow = value),
             ),
           ),
+          // New: informational banner shown until the user connects a ride,
+          // so the screen never reads as blank/broken on first open.
+          if (!connected)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFBFDBFE)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: const [
+                    Icon(Icons.info_outline,
+                        size: 18, color: Color(0xFF2563EB)),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Enter a Ride Offer ID above and tap Connect to start live tracking. '
+                        'You\'ll see this map update once a ride is connected.',
+                        style:
+                            TextStyle(fontSize: 12, color: Color(0xFF1E3A8A)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           Expanded(
             child: Stack(
               fit: StackFit.expand,
@@ -198,6 +256,41 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                     ),
                   ),
                 ),
+                // New: lightweight loading overlay while resolving the
+                // initial location, instead of an unexplained frozen map.
+                if (_isLocating)
+                  Positioned(
+                    top: 12,
+                    left: 24,
+                    right: 24,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: const [
+                          BoxShadow(
+                              color: Color(0x140F172A),
+                              blurRadius: 10,
+                              offset: Offset(0, 4)),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 10),
+                          Text('Locating you...',
+                              style: TextStyle(fontSize: 12)),
+                        ],
+                      ),
+                    ),
+                  ),
                 Positioned(
                   right: 24,
                   bottom: 24,
