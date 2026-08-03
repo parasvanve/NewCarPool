@@ -1,4 +1,4 @@
-using NewCarPool.Application.Common;
+﻿using NewCarPool.Application.Common;
 using NewCarPool.Application.DTOs.Rides;
 using NewCarPool.Application.Interfaces.Repositories;
 using NewCarPool.Application.Interfaces.Services;
@@ -46,7 +46,38 @@ public sealed class RideService : IRideService
     private readonly ILogger<RideService> _logger;
     private readonly INotificationService _notificationService;
     private readonly IWebHostEnvironment _environment;
+    //private readonly IHubContext<AppRealtimeHub> _hubContext;
+
+    //public RideService(
+    //    IRideRepository rides,
+    //    IUserRepository users,
+    //    IGenericRepository<RideOffer> rideOffers,
+    //    IGenericRepository<RideBooking> rideBookings,
+    //    IGenericRepository<RideChatGroup> chatGroups,
+    //    IGenericRepository<RideChatMessage> chatMessages,
+    //    Data.NewCarPoolDbContext dbContext,
+    //    ILogger<RideService> logger,
+    //    INotificationService notificationService,
+    //    IWebHostEnvironment environment,
+    //    IHubContext<AppRealtimeHub> hubContext,
+    //    IUnitOfWork unitOfWork)
+    //{
+    //    _rides = rides;
+    //    _users = users;
+    //    _rideOffers = rideOffers;
+    //    _rideBookings = rideBookings;
+    //    _chatGroups = chatGroups;
+    //    _chatMessages = chatMessages;
+    //    _dbContext = dbContext;
+    //    _logger = logger;
+    //    _notificationService = notificationService;
+    //    _environment = environment;
+    //    _hubContext = hubContext;
+    //    _unitOfWork = unitOfWork;
+    //}
+
     private readonly IHubContext<AppRealtimeHub> _hubContext;
+    private readonly Microsoft.Extensions.Configuration.IConfiguration _configuration;
 
     public RideService(
         IRideRepository rides,
@@ -60,7 +91,8 @@ public sealed class RideService : IRideService
         INotificationService notificationService,
         IWebHostEnvironment environment,
         IHubContext<AppRealtimeHub> hubContext,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        Microsoft.Extensions.Configuration.IConfiguration configuration)
     {
         _rides = rides;
         _users = users;
@@ -74,6 +106,7 @@ public sealed class RideService : IRideService
         _environment = environment;
         _hubContext = hubContext;
         _unitOfWork = unitOfWork;
+        _configuration = configuration;
     }
 
     public async Task<RideOfferDto> OfferRideAsync(Guid driverId, CreateRideOfferRequest request, CancellationToken cancellationToken)
@@ -221,7 +254,39 @@ public sealed class RideService : IRideService
     }
 
     public async Task<RideOfferDto> DetailsAsync(Guid rideOfferId, CancellationToken cancellationToken) =>
-        MapRide(await _rides.GetRideByIdAsync(rideOfferId, cancellationToken) ?? throw new ApiException("Ride not found.", 404));
+    MapRide(await _rides.GetRideByIdAsync(rideOfferId, cancellationToken) ?? throw new ApiException("Ride not found.", 404));
+
+    public async Task<RidePublicDto> PublicDetailsAsync(Guid rideOfferId, CancellationToken cancellationToken) =>
+        MapPublicRide(await _rides.GetRideByIdAsync(rideOfferId, cancellationToken) ?? throw new ApiException("Ride not found.", 404));
+
+
+
+    public async Task<RideShareLinkDto> GenerateShareLinkAsync(Guid driverId, Guid rideOfferId, CancellationToken cancellationToken)
+    {
+        var ride = await _rides.GetRideByIdAsync(rideOfferId, cancellationToken) ?? throw new ApiException("Ride not found.", 404);
+
+        if (ride.DriverId != driverId)
+        {
+            throw new ApiException("Only the driver can share this ride.", 403);
+        }
+
+        var baseUrl = _configuration["App:WebBaseUrl"]?.TrimEnd('/')
+            ?? throw new ApiException("Share link base URL is not configured.", 500);
+        var shareUrl = $"{baseUrl}/rides/{ride.Id}";
+
+        var message =
+            $"🚗 Join My CarPool Ride!\n\n" +
+            $"👤 Driver: {ride.Driver?.FullName}\n\n" +
+            $"📍 From: {ride.OriginName}\n\n" +
+            $"📍 To: {ride.DestinationName}\n\n" +
+            $"🕒 Departure: {NormalizeToUtc(ride.DepartureTimeUtc):dd MMM yyyy | hh:mm tt}\n\n" +
+            $"💺 Available Seats: {ride.AvailableSeats}\n\n" +
+            $"💰 Fare per Seat: ₹{ride.PricePerSeat}\n\n" +
+            $"🔗 Join this ride:\n{shareUrl}\n\n" +
+            $"Download NewCarPool and book your seat now!";
+
+        return new RideShareLinkDto(shareUrl, message);
+    }
 
     public async Task<RideOfferDto> UpdateRideAsync(Guid driverId, Guid rideOfferId, CreateRideOfferRequest request, CancellationToken cancellationToken)
     {
@@ -931,6 +996,26 @@ public sealed class RideService : IRideService
             ride.CancelledAtUtc,
             ride.CancellationReason);
 
+
+    //new code
+
+    private static RidePublicDto MapPublicRide(RideOffer ride) =>
+        new(
+            ride.Id,
+            ride.Driver?.FullName ?? string.Empty,
+            new GeoPointDto(ride.OriginName, ride.OriginLatitude, ride.OriginLongitude, ride.OriginAddress),
+            new GeoPointDto(ride.DestinationName, ride.DestinationLatitude, ride.DestinationLongitude, ride.DestinationAddress),
+            ride.IntermediateStops
+                .OrderBy(x => x.StopOrder)
+                .Select(x => new RideStopDto(x.Name, x.Address, x.Latitude, x.Longitude, x.StopOrder))
+                .ToList(),
+            NormalizeToUtc(ride.DepartureTimeUtc),
+            ride.AvailableSeats,
+            ride.Bookings.Count(x => x.Status == BookingStatus.Confirmed),
+            ride.PricePerSeat,
+            ride.VehicleName,
+            ride.VehicleNumber,
+            ride.Status);
     private static IQueryable<RideOfferDto> ProjectRideCards(IQueryable<RideOffer> query) =>
         query.Select(ride => new RideOfferDto(
             ride.Id,
@@ -1067,4 +1152,9 @@ public sealed class RideService : IRideService
         var safeName = new string(safeChars).Trim('.', ' ', '_');
         return string.IsNullOrWhiteSpace(safeName) ? "attachment" : Truncate(safeName, 255);
     }
+
+    //public Task<RidePublicDto> PublicDetailsAsync(Guid rideOfferId, CancellationToken cancellationToken)
+    //{
+    //    throw new NotImplementedException();
+    //}
 }

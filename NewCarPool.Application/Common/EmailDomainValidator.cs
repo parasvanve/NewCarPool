@@ -11,6 +11,7 @@ namespace NewCarPool.Application.Common
         private static readonly HashSet<string> AllowedDomains =
             new(StringComparer.OrdinalIgnoreCase)
             {
+            "yopmail.com",
             "gmail.com",
             "tcs.com",
             "capgemini.com",

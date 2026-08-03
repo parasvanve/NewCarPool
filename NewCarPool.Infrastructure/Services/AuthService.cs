@@ -208,6 +208,10 @@ public sealed class AuthService : IAuthService
         return await IssueTokensAsync(user, cancellationToken);
     }
 
+    //new code 
+    public async Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken) =>
+        await _users.ExistsByEmailAsync(email.Trim().ToLowerInvariant(), cancellationToken);
+
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
         if (!EmailDomainValidator.IsAllowed(request.Email))

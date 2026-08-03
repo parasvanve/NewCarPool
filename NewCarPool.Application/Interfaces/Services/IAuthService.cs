@@ -8,6 +8,8 @@ public interface IAuthService
     Task<RegisterOtpResponse> SendRegisterOtpAsync(SendRegisterOtpRequest request, CancellationToken cancellationToken);
     Task<AuthResponse> VerifyRegisterOtpAsync(VerifyRegisterOtpRequest request, CancellationToken cancellationToken);
     Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken);
+
+    Task<bool> EmailExistsAsync(string email, CancellationToken cancellationToken);
     Task<AuthResponse> RefreshAsync(RefreshTokenRequest request, CancellationToken cancellationToken);
     Task LogoutAsync(Guid userId, RefreshTokenRequest request, CancellationToken cancellationToken);
     Task<string> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancellationToken);

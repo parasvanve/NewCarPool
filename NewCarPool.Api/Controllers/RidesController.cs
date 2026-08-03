@@ -66,6 +66,16 @@ public sealed class RidesController : ControllerBase
     public async Task<ActionResult<RideOfferDto>> Details(Guid rideOfferId, CancellationToken cancellationToken) =>
         Ok(await _rideService.DetailsAsync(rideOfferId, cancellationToken));
 
+    //newcode 
+    [AllowAnonymous]
+    [HttpGet("{rideOfferId:guid}/public")]
+    public async Task<ActionResult<RidePublicDto>> PublicDetails(Guid rideOfferId, CancellationToken cancellationToken) =>
+        Ok(await _rideService.PublicDetailsAsync(rideOfferId, cancellationToken));
+
+    [HttpPost("{rideOfferId:guid}/share-link")]
+    public async Task<ActionResult<RideShareLinkDto>> ShareLink(Guid rideOfferId, CancellationToken cancellationToken) =>
+        Ok(await _rideService.GenerateShareLinkAsync(User.GetUserId(), rideOfferId, cancellationToken));
+
     [HttpPut("{rideOfferId:guid}")]
     public async Task<ActionResult<RideOfferDto>> Update(Guid rideOfferId, CreateRideOfferRequest request, CancellationToken cancellationToken) =>
         Ok(await _rideService.UpdateRideAsync(User.GetUserId(), rideOfferId, request, cancellationToken));

@@ -30,6 +30,10 @@ public sealed class AuthController : ControllerBase
     public async Task<ActionResult<AuthResponse>> Login(LoginRequest request, CancellationToken cancellationToken) =>
         Ok(await _authService.LoginAsync(request, cancellationToken));
 
+    [HttpGet("exists")]
+    public async Task<ActionResult<object>> EmailExists([FromQuery] string email, CancellationToken cancellationToken) =>
+        Ok(new { exists = await _authService.EmailExistsAsync(email, cancellationToken) });
+
     [HttpPost("refresh")]
     public async Task<ActionResult<AuthResponse>> Refresh(RefreshTokenRequest request, CancellationToken cancellationToken) =>
         Ok(await _authService.RefreshAsync(request, cancellationToken));
