@@ -18,6 +18,10 @@ import '../../services/ride_service.dart';
 import '../../services/tracking_service.dart';
 import 'ride_chat_screen.dart';
 
+//new code
+import 'package:share_plus/share_plus.dart';
+import '../../core/errors/app_exception.dart';
+
 class RideDetailsScreen extends StatefulWidget {
   const RideDetailsScreen({super.key, this.extra});
   final Object? extra;
@@ -401,6 +405,39 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     }
   }
 
+  //new code
+  // Future<void> _shareRide(BuildContext context, String rideId) async {
+  //   try {
+  //     final message =
+  //         await context.read<RideService>().generateShareLink(rideId);
+  //     await SharePlus.instance.share(ShareParams(text: message));
+  //   } on Object catch (error) {
+  //     if (!mounted) return;
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(
+  //           content: Text(error is AppException
+  //               ? error.message
+  //               : 'Could not create share link')),
+  //     );
+  //   }
+  // }
+
+  Future<void> _shareRide(BuildContext context, String rideId) async {
+    try {
+      final message =
+          await context.read<RideService>().generateShareLink(rideId);
+      await Share.share(message);
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text(error is AppException
+                ? error.message
+                : 'Could not create share link')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final ride = _ride;
@@ -501,6 +538,15 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                 ],
               ),
             ),
+
+          //new code
+          if (isDriver)
+            IconButton(
+              icon: const Icon(Icons.share),
+              tooltip: 'Share Ride',
+              onPressed: () => _shareRide(context, ride.id),
+            ),
+
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline),
             onPressed: () => Navigator.of(context).push(

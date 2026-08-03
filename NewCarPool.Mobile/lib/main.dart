@@ -15,23 +15,63 @@ import 'providers/ride_provider.dart';
 import 'providers/vehicle_provider.dart';
 import 'services/ride_chat_service.dart';
 
+//new code
+import 'core/routing/deep_link_service.dart';
+
 void main() {
   final dependencies = AppDependencies();
   runApp(NewCarPoolApp(dependencies: dependencies));
 }
 
-class NewCarPoolApp extends StatelessWidget {
+// class NewCarPoolApp extends StatelessWidget {
+//   const NewCarPoolApp({super.key, required this.dependencies});
+
+//   final AppDependencies dependencies;
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return MultiProvider(
+
+//new code
+
+class NewCarPoolApp extends StatefulWidget {
   const NewCarPoolApp({super.key, required this.dependencies});
 
   final AppDependencies dependencies;
 
   @override
+  State<NewCarPoolApp> createState() => _NewCarPoolAppState();
+}
+
+class _NewCarPoolAppState extends State<NewCarPoolApp> {
+  final _deepLinkService = DeepLinkService();
+
+  @override
+  void initState() {
+    super.initState();
+    _deepLinkService.init();
+  }
+
+  @override
+  void dispose() {
+    _deepLinkService.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final dependencies = widget.dependencies;
     return MultiProvider(
       providers: [
         Provider.value(value: dependencies.apiClient),
+        // Provider.value(value: dependencies.tokenStore),
+        // Provider.value(value: dependencies.rideService),
+
+        //new code
         Provider.value(value: dependencies.tokenStore),
+        Provider.value(value: dependencies.authService),
         Provider.value(value: dependencies.rideService),
+
         Provider.value(value: dependencies.vehicleService),
         Provider.value(value: dependencies.bookingService),
         Provider.value(value: dependencies.paymentService),

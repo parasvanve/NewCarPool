@@ -14,7 +14,8 @@ class AuthService {
     return AuthSession.fromJson(response.data);
   }
 
-  Future<AuthSession> register(String fullName, String email, String phoneNumber, String password) async {
+  Future<AuthSession> register(String fullName, String email,
+      String phoneNumber, String password) async {
     final response = await _apiClient.dio.post('/auth/register', data: {
       'fullName': fullName,
       'email': email,
@@ -31,7 +32,8 @@ class AuthService {
     required String password,
     required String confirmPassword,
   }) async {
-    final response = await _apiClient.dio.post('/auth/send-register-otp', data: {
+    final response =
+        await _apiClient.dio.post('/auth/send-register-otp', data: {
       'fullName': fullName,
       'email': email,
       'phoneNumber': phoneNumber,
@@ -43,11 +45,19 @@ class AuthService {
   }
 
   Future<AuthSession> verifyRegisterOtp(String email, String otp) async {
-    final response = await _apiClient.dio.post('/auth/verify-register-otp', data: {
+    final response =
+        await _apiClient.dio.post('/auth/verify-register-otp', data: {
       'email': email,
       'otp': otp,
     });
     return AuthSession.fromJson(response.data);
+  }
+
+  //new code
+  Future<bool> emailExists(String email) async {
+    final response = await _apiClient.dio
+        .get('/auth/exists', queryParameters: {'email': email});
+    return response.data['exists'] as bool;
   }
 
   Future<String> forgotPassword(String email) async {
@@ -57,7 +67,8 @@ class AuthService {
     return response.data['resetToken']?.toString() ?? '';
   }
 
-  Future<void> resetPassword(String email, String resetToken, String newPassword) async {
+  Future<void> resetPassword(
+      String email, String resetToken, String newPassword) async {
     await _apiClient.dio.post('/auth/reset-password', data: {
       'email': email,
       'resetToken': resetToken,

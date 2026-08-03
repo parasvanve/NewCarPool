@@ -11,6 +11,9 @@ import '../../providers/profile_provider.dart';
 import 'auth_shell.dart';
 import 'auth_validators.dart';
 
+//new code
+import '../../core/routing/pending_ride_redirect.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -36,14 +39,19 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.watch<AuthProvider>();
     return AuthShell(
       title: 'Welcome back',
-      subtitle: 'Sign in to book rides, offer seats, and track trips in realtime.',
+      subtitle:
+          'Sign in to book rides, offer seats, and track trips in realtime.',
       children: [
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: const [
-            Chip(label: Text('Secure Login'), avatar: Icon(Icons.verified_user, size: 16)),
-            Chip(label: Text('Realtime Trips'), avatar: Icon(Icons.route, size: 16)),
+            Chip(
+                label: Text('Secure Login'),
+                avatar: Icon(Icons.verified_user, size: 16)),
+            Chip(
+                label: Text('Realtime Trips'),
+                avatar: Icon(Icons.route, size: 16)),
           ],
         ),
         const SizedBox(height: 14),
@@ -56,7 +64,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
+                decoration: const InputDecoration(
+                    labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
                 validator: AuthValidators.email,
               ),
               const SizedBox(height: 14),
@@ -68,8 +77,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   labelText: 'Password',
                   prefixIcon: const Icon(Icons.lock_outline),
                   suffixIcon: IconButton(
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                    icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
+                    icon: Icon(_obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined),
                   ),
                 ),
                 validator: AuthValidators.password,
@@ -77,7 +89,9 @@ class _LoginScreenState extends State<LoginScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: auth.isLoading ? null : () => context.push(AppRoutes.forgotPassword),
+                  onPressed: auth.isLoading
+                      ? null
+                      : () => context.push(AppRoutes.forgotPassword),
                   child: const Text('Forgot password?'),
                 ),
               ),
@@ -90,7 +104,9 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 12),
               OutlinedButton(
-                onPressed: auth.isLoading ? null : () => context.push(AppRoutes.register),
+                onPressed: auth.isLoading
+                    ? null
+                    : () => context.push(AppRoutes.register),
                 child: const Text('Create account'),
               ),
             ],
@@ -106,20 +122,32 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     try {
-      await context.read<AuthProvider>().login(_email.text.trim(), _password.text);
+      await context
+          .read<AuthProvider>()
+          .login(_email.text.trim(), _password.text);
       await context.read<ProfileProvider>().loadProfile();
       final profile = context.read<ProfileProvider>().profile;
       if (profile != null && context.mounted) {
         context.read<AuthProvider>().syncFromProfile(profile);
       }
+      // if (context.mounted) {
+      //   AppSnackBar.showSuccess(context, 'Welcome back!');
+      //   context.go(AppRoutes.dashboard);
+      // }
+
+      //new code
       if (context.mounted) {
         AppSnackBar.showSuccess(context, 'Welcome back!');
-        context.go(AppRoutes.dashboard);
+        final pendingRideId = PendingRideRedirect.consume();
+        context.go(pendingRideId != null
+            ? AppRoutes.sharedRidePath(pendingRideId)
+            : AppRoutes.dashboard);
       }
     } on DioException catch (exception) {
       final error = exception.error;
       if (context.mounted) {
-        AppSnackBar.showError(context, error is AppException ? error.message : 'Sign in failed');
+        AppSnackBar.showError(
+            context, error is AppException ? error.message : 'Sign in failed');
       }
     } catch (exception) {
       if (context.mounted) {

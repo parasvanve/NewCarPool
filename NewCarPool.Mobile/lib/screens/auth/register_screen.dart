@@ -13,6 +13,9 @@ import '../../providers/profile_provider.dart';
 import 'auth_shell.dart';
 import 'auth_validators.dart';
 
+//new code
+import '../../core/routing/pending_ride_redirect.dart';
+
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -60,12 +63,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              Chip(label: Text('Driver + Passenger'), avatar: Icon(Icons.swap_horiz, size: 16)),
-              Chip(label: Text('Quick Onboarding'), avatar: Icon(Icons.bolt, size: 16)),
+              Chip(
+                  label: Text('Driver + Passenger'),
+                  avatar: Icon(Icons.swap_horiz, size: 16)),
+              Chip(
+                  label: Text('Quick Onboarding'),
+                  avatar: Icon(Icons.bolt, size: 16)),
             ],
           ),
         const SizedBox(height: 14),
-        _otpSent ? _buildOtpStep(context, auth) : _buildRegistrationStep(context, auth),
+        _otpSent
+            ? _buildOtpStep(context, auth)
+            : _buildRegistrationStep(context, auth),
       ],
     );
   }
@@ -79,15 +88,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
           TextFormField(
             controller: _name,
             textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(labelText: 'Full Name', prefixIcon: Icon(Icons.person_outline)),
-            validator: (value) => AuthValidators.requiredText(value, 'Full name'),
+            decoration: const InputDecoration(
+                labelText: 'Full Name', prefixIcon: Icon(Icons.person_outline)),
+            validator: (value) =>
+                AuthValidators.requiredText(value, 'Full name'),
           ),
           const SizedBox(height: 14),
           TextFormField(
             controller: _email,
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
+            decoration: const InputDecoration(
+                labelText: 'Email', prefixIcon: Icon(Icons.email_outlined)),
             validator: AuthValidators.email,
           ),
           const SizedBox(height: 14),
@@ -95,7 +107,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
             controller: _phone,
             keyboardType: TextInputType.phone,
             textInputAction: TextInputAction.next,
-            decoration: const InputDecoration(labelText: 'Phone Number', prefixIcon: Icon(Icons.phone_outlined)),
+            decoration: const InputDecoration(
+                labelText: 'Phone Number',
+                prefixIcon: Icon(Icons.phone_outlined)),
             validator: AuthValidators.phone,
           ),
           const SizedBox(height: 14),
@@ -107,8 +121,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
               labelText: 'Password',
               prefixIcon: const Icon(Icons.lock_outline),
               suffixIcon: IconButton(
-                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                onPressed: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
+                icon: Icon(_obscurePassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined),
               ),
             ),
             validator: AuthValidators.password,
@@ -121,8 +138,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
               labelText: 'Confirm Password',
               prefixIcon: const Icon(Icons.lock_reset_outlined),
               suffixIcon: IconButton(
-                onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
-                icon: Icon(_obscureConfirmPassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                onPressed: () => setState(
+                    () => _obscureConfirmPassword = !_obscureConfirmPassword),
+                icon: Icon(_obscureConfirmPassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined),
               ),
             ),
             validator: _confirmPasswordValidator,
@@ -136,7 +156,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           const SizedBox(height: 12),
           OutlinedButton(
-            onPressed: auth.isLoading ? null : () => context.go(AppRoutes.login),
+            onPressed:
+                auth.isLoading ? null : () => context.go(AppRoutes.login),
             child: const Text('I already have an account'),
           ),
         ],
@@ -150,7 +171,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       children: [
         Text(
           'Enter OTP sent to your email',
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          style: Theme.of(context)
+              .textTheme
+              .titleMedium
+              ?.copyWith(fontWeight: FontWeight.w700),
         ),
         const SizedBox(height: 4),
         Text(_email.text.trim(), style: Theme.of(context).textTheme.bodyMedium),
@@ -174,9 +198,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: auth.isLoading || _resendSeconds > 0 ? null : () => _resendOtp(context),
+          onPressed: auth.isLoading || _resendSeconds > 0
+              ? null
+              : () => _resendOtp(context),
           icon: const Icon(Icons.refresh),
-          label: Text(_resendSeconds > 0 ? 'Resend OTP in ${_resendSeconds}s' : 'Resend OTP'),
+          label: Text(_resendSeconds > 0
+              ? 'Resend OTP in ${_resendSeconds}s'
+              : 'Resend OTP'),
         ),
         TextButton(
           onPressed: auth.isLoading
@@ -226,7 +254,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } on DioException catch (exception) {
       final error = exception.error;
       if (context.mounted) {
-        AppSnackBar.showError(context, error is AppException ? error.message : 'Could not send OTP');
+        AppSnackBar.showError(context,
+            error is AppException ? error.message : 'Could not send OTP');
       }
     } catch (exception) {
       if (context.mounted) {
@@ -250,7 +279,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } on DioException catch (exception) {
       final error = exception.error;
       if (context.mounted) {
-        AppSnackBar.showError(context, error is AppException ? error.message : 'Could not send OTP');
+        AppSnackBar.showError(context,
+            error is AppException ? error.message : 'Could not send OTP');
       }
     } catch (exception) {
       if (context.mounted) {
@@ -276,14 +306,27 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (profile != null) {
         authProvider.syncFromProfile(profile);
       }
+      // AppSnackBar.showSuccess(context, 'Account created successfully.');
+      // final seenOnboarding = await authProvider.hasSeenOnboarding();
+      // if (!context.mounted) return;
+      // context.go(seenOnboarding ? AppRoutes.dashboard : AppRoutes.onboarding);
+
+      //new code
       AppSnackBar.showSuccess(context, 'Account created successfully.');
+      final pendingRideId = PendingRideRedirect.consume();
+      if (pendingRideId != null) {
+        if (!context.mounted) return;
+        context.go(AppRoutes.sharedRidePath(pendingRideId));
+        return;
+      }
       final seenOnboarding = await authProvider.hasSeenOnboarding();
       if (!context.mounted) return;
       context.go(seenOnboarding ? AppRoutes.dashboard : AppRoutes.onboarding);
     } on DioException catch (exception) {
       final error = exception.error;
       if (context.mounted) {
-        AppSnackBar.showError(context, error is AppException ? error.message : 'Invalid OTP');
+        AppSnackBar.showError(
+            context, error is AppException ? error.message : 'Invalid OTP');
       }
     } catch (exception) {
       if (context.mounted) {
@@ -295,7 +338,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void _startResendTimer(DateTime? resendAt) {
     _resendTimer?.cancel();
     final now = DateTime.now().toUtc();
-    final seconds = resendAt == null ? 60 : resendAt.toUtc().difference(now).inSeconds;
+    final seconds =
+        resendAt == null ? 60 : resendAt.toUtc().difference(now).inSeconds;
     setState(() => _resendSeconds = seconds.clamp(0, 60).toInt());
 
     _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {

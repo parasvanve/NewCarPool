@@ -18,4 +18,8 @@ class AppRoutes {
   static const driverRequests = '/driver-requests';
   static const tracking = '/tracking';
   static const rideDetails = '/ride-details';
+
+  //new code
+  static const sharedRide = '/rides/:id';
+  static String sharedRidePath(String id) => '/rides/$id';
 }

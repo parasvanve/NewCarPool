@@ -145,3 +145,57 @@ class RideStop {
             (json['order'] as num? ?? json['stopOrder'] as num?)?.toInt() ?? 0,
       );
 }
+
+//new code
+class RidePublicSummary {
+  const RidePublicSummary({
+    required this.id,
+    required this.driverName,
+    required this.origin,
+    required this.destination,
+    this.intermediateStops = const [],
+    required this.departureTimeUtc,
+    required this.availableSeats,
+    this.participantCount = 0,
+    required this.pricePerSeat,
+    this.vehicleName,
+    this.vehicleNumber,
+    required this.status,
+  });
+
+  final String id;
+  final String driverName;
+  final GeoPoint origin;
+  final GeoPoint destination;
+  final List<RideStop> intermediateStops;
+  final DateTime departureTimeUtc;
+  final int availableSeats;
+  final int participantCount;
+  final num pricePerSeat;
+  final String? vehicleName;
+  final String? vehicleNumber;
+  final String status;
+
+  factory RidePublicSummary.fromJson(Map<String, dynamic> json) =>
+      RidePublicSummary(
+        id: json['id'].toString(),
+        driverName: json['driverName']?.toString() ?? '',
+        origin:
+            GeoPoint.fromJson(Map<String, dynamic>.from(json['origin'] as Map)),
+        destination: GeoPoint.fromJson(
+            Map<String, dynamic>.from(json['destination'] as Map)),
+        intermediateStops: (json['intermediateStops'] as List<dynamic>? ?? [])
+            .map((x) => RideStop.fromJson(Map<String, dynamic>.from(x as Map)))
+            .toList(),
+        departureTimeUtc: DepartureTimeUtils.parseUtcFromBackend(
+          json['departureTimeUtc'],
+          context: 'RidePublicSummary',
+        ),
+        availableSeats: (json['availableSeats'] as num).toInt(),
+        participantCount: (json['participantCount'] as num? ?? 0).toInt(),
+        pricePerSeat: json['pricePerSeat'] as num,
+        vehicleName: json['vehicleName']?.toString(),
+        vehicleNumber: json['vehicleNumber']?.toString(),
+        status: json['status'].toString(),
+      );
+}
