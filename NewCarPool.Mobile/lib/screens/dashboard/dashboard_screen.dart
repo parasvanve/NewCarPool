@@ -90,7 +90,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 1100;
     final pages = [
-      const _HomePage(),
+      _HomePage(onProfileTap: () => setState(() => _index = 3)),
       const TripsScreen(showAppBar: false),
       const NotificationScreen(showAppBar: false),
       const ProfileScreen(showAppBar: false),
@@ -230,7 +230,8 @@ class _DesktopSidebar extends StatelessWidget {
 }
 
 class _HomePage extends StatelessWidget {
-  const _HomePage();
+  const _HomePage({required this.onProfileTap});
+  final VoidCallback onProfileTap;
 
   @override
   Widget build(BuildContext context) {
@@ -275,7 +276,7 @@ class _HomePage extends StatelessWidget {
     final leftContent = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _TopHomeBar(unreadCount: unreadCount),
+        _TopHomeBar(unreadCount: unreadCount, onProfileTap: onProfileTap),
         const SizedBox(height: 12),
         _GreetingCard(firstName: firstName),
         const SizedBox(height: 12),
@@ -380,9 +381,10 @@ class _HomePage extends StatelessWidget {
 }
 
 class _TopHomeBar extends StatelessWidget {
-  const _TopHomeBar({required this.unreadCount});
+  const _TopHomeBar({required this.unreadCount, required this.onProfileTap});
 
   final int unreadCount;
+  final VoidCallback onProfileTap;
 
   @override
   Widget build(BuildContext context) {
@@ -419,7 +421,12 @@ class _TopHomeBar extends StatelessWidget {
             ],
           ),
         ),
-        const CircleAvatar(radius: 16, child: Icon(Icons.person, size: 18)),
+        InkWell(
+          onTap: onProfileTap,
+          customBorder: const CircleBorder(),
+          child: const CircleAvatar(
+              radius: 16, child: Icon(Icons.person, size: 18)),
+        ),
       ],
     );
   }
