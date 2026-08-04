@@ -27,11 +27,28 @@ class ProfileProvider extends ChangeNotifier {
     }
   }
 
+//   Future<void> update(String fullName, String phoneNumber) async {
+//     isLoading = true;
+//     notifyListeners();
+//     try {
+//       profile = await _profileService.update(fullName, phoneNumber);
+//     } finally {
+//       isLoading = false;
+//       notifyListeners();
+//     }
+//   }
+// }
+
+//new code
   Future<void> update(String fullName, String phoneNumber) async {
     isLoading = true;
+    errorMessage = null;
     notifyListeners();
     try {
       profile = await _profileService.update(fullName, phoneNumber);
+    } catch (error) {
+      errorMessage = error.toString();
+      rethrow;
     } finally {
       isLoading = false;
       notifyListeners();
