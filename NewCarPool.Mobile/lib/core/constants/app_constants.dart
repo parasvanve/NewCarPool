@@ -1,7 +1,7 @@
 class AppConstants {
-  static const appName = 'NewCarPool';
-  static const supportEmail = 'support@newcarpool.local';
-  static const osmUserAgent = 'com.newcarpool.mobile';
+  static const appName = 'CarPool';
+  static const supportEmail = 'support@carpool.local';
+  static const osmUserAgent = 'com.carpool.mobile';
   static const defaultPageSize = 20;
   static const dashboardCacheSeconds = 60;
   static const tripsCacheSeconds = 60;

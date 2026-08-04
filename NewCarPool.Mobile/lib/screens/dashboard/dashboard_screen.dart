@@ -162,7 +162,7 @@ class _DesktopSidebar extends StatelessWidget {
                     color: AppDesignTokens.brandStart),
               ),
               SizedBox(width: 10),
-              Text('NewCarPool',
+              Text('CarPool',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
             ],
           ),
@@ -674,7 +674,7 @@ class _WhyNewCarpoolCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Why NewCarPool?',
+            const Text('Why CarPool?',
                 style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700)),
             const SizedBox(height: 12),
             if (isMobile)
