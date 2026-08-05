@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:go_router/go_router.dart';
 import '../constants/app_routes.dart';
 import '../../screens/auth/login_screen.dart';
@@ -43,8 +44,19 @@ class AppRouter {
     );
   }
 
+  static String _resolveInitialLocation() {
+    if (kIsWeb) {
+      final path = Uri.base.path;
+      if (path.startsWith('/rides/')) return path;
+    }
+    return AppRoutes.splash;
+  }
+
   static final router = GoRouter(
-    initialLocation: AppRoutes.splash,
+    initialLocation: _resolveInitialLocation(),
+
+    // static final router = GoRouter(
+    //   initialLocation: AppRoutes.splash,
     routes: [
       GoRoute(
           path: AppRoutes.splash,
