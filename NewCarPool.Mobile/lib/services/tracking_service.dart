@@ -32,11 +32,22 @@ class TrackingService {
 
     await disconnect();
     final token = await _tokenStore.accessToken;
+    // _connection = HubConnectionBuilder()
+    //     .withUrl(
+    //       '${AppConfig.apiBaseUrl}/hubs/tracking',
+    //       options: HttpConnectionOptions(
+    //           accessTokenFactory: () async => token ?? ''),
+    //     )
+    //     .withAutomaticReconnect()
+    //     .build();
+
+    //new code
     _connection = HubConnectionBuilder()
         .withUrl(
-          '${AppConfig.apiBaseUrl}/hubs/tracking',
+          '${AppConfig.apiBaseUrl}/hubs/notifications',
           options: HttpConnectionOptions(
-              accessTokenFactory: () async => token ?? ''),
+            accessTokenFactory: () async => await _tokenStore.accessToken ?? '',
+          ),
         )
         .withAutomaticReconnect()
         .build();

@@ -174,7 +174,8 @@ class RidePublicSummary {
   final num pricePerSeat;
   final String? vehicleName;
   final String? vehicleNumber;
-  final String status;
+  // final String status;
+  final int status;
 
   factory RidePublicSummary.fromJson(Map<String, dynamic> json) =>
       RidePublicSummary(
@@ -196,6 +197,7 @@ class RidePublicSummary {
         pricePerSeat: json['pricePerSeat'] as num,
         vehicleName: json['vehicleName']?.toString(),
         vehicleNumber: json['vehicleNumber']?.toString(),
-        status: json['status'].toString(),
+        // status: json['status'].toString(),
+        status: (json['status'] as num).toInt(),
       );
 }

@@ -17,6 +17,13 @@ import '../../providers/notification_provider.dart';
 import '../../providers/ride_provider.dart';
 import '../../services/map_service.dart';
 
+//new code
+import 'package:go_router/go_router.dart';
+import '../../core/constants/app_routes.dart';
+import '../../core/network/token_store.dart';
+import '../../core/routing/pending_ride_redirect.dart';
+import '../../services/auth_service.dart';
+
 class BookingFlowScreen extends StatefulWidget {
   const BookingFlowScreen({super.key, this.extra});
 
@@ -473,6 +480,52 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
     );
   }
 
+  //new code
+  Future<bool> _ensureLoggedIn(BuildContext context, String rideId) async {
+    final token = await context.read<TokenStore>().accessToken;
+    if (token != null) return true;
+
+    final email = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: const Text('Enter your email to continue'),
+          content: TextField(
+            controller: controller,
+            keyboardType: TextInputType.emailAddress,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'you@example.com'),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Cancel')),
+            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, controller.text),
+              child: const Text('Continue'),
+            ),
+          ],
+        );
+      },
+    );
+    if (email == null || email.trim().isEmpty || !mounted) return false;
+
+    try {
+      final exists =
+          await context.read<AuthService>().emailExists(email.trim());
+      if (!mounted) return false;
+      PendingRideRedirect.set(rideId);
+      await context.push(exists ? AppRoutes.login : AppRoutes.register);
+    } on Object catch (error) {
+      if (!mounted) return false;
+      _showError(error is AppException
+          ? error.message
+          : 'Something went wrong. Please try again.');
+    }
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final ride = widget.extra is RideOffer ? widget.extra as RideOffer : null;
@@ -868,7 +921,15 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
           FilledButton(
             onPressed: _submitting
                 ? null
+                // : () async {
+                //     if (_pickupPoint == null) {
+
+                //new code
                 : () async {
+                    final alreadyAuthed =
+                        await _ensureLoggedIn(context, ride.id);
+                    if (!alreadyAuthed) return;
+
                     if (_pickupPoint == null) {
                       _showError('Pickup point is required');
                       return;

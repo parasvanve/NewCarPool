@@ -104,10 +104,21 @@ class RideChatService {
     if (_connection?.state == HubConnectionState.Connected) return;
     final token = await _tokenStore.accessToken;
     if (token == null) return;
+    // _connection = HubConnectionBuilder()
+    //     .withUrl(
+    //       '${AppConfig.apiBaseUrl}/hubs/notifications',
+    //       options: HttpConnectionOptions(accessTokenFactory: () async => token),
+    //     )
+    //     .withAutomaticReconnect()
+    //     .build();
+
+    //new code
     _connection = HubConnectionBuilder()
         .withUrl(
           '${AppConfig.apiBaseUrl}/hubs/notifications',
-          options: HttpConnectionOptions(accessTokenFactory: () async => token),
+          options: HttpConnectionOptions(
+            accessTokenFactory: () async => await _tokenStore.accessToken ?? '',
+          ),
         )
         .withAutomaticReconnect()
         .build();

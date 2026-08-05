@@ -16,7 +16,8 @@ class NotificationService {
     final response = await _apiClient.dio.get('/notifications');
     final items = response.data as List<dynamic>;
     return items
-        .map((item) => AppNotification.fromJson(Map<String, dynamic>.from(item as Map)))
+        .map((item) =>
+            AppNotification.fromJson(Map<String, dynamic>.from(item as Map)))
         .toList();
   }
 
@@ -46,14 +47,26 @@ class NotificationService {
     return 0;
   }
 
-  Future<void> connect(String userId, void Function(AppNotification) onNotification) async {
+  Future<void> connect(
+      String userId, void Function(AppNotification) onNotification) async {
     final token = await _tokenStore.accessToken;
     if (token == null) return;
 
+    // _connection = HubConnectionBuilder()
+    //     .withUrl(
+    //       '${AppConfig.apiBaseUrl}/hubs/notifications',
+    //       options: HttpConnectionOptions(accessTokenFactory: () async => token),
+    //     )
+    //     .withAutomaticReconnect()
+    //     .build();
+
+    //new code
     _connection = HubConnectionBuilder()
         .withUrl(
           '${AppConfig.apiBaseUrl}/hubs/notifications',
-          options: HttpConnectionOptions(accessTokenFactory: () async => token),
+          options: HttpConnectionOptions(
+            accessTokenFactory: () async => await _tokenStore.accessToken ?? '',
+          ),
         )
         .withAutomaticReconnect()
         .build();
