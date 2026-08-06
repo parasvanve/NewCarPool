@@ -966,11 +966,22 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                       await bookingProvider.loadHistory();
                       await notificationProvider.loadMine();
                       await notificationProvider.loadUnreadCount();
+                      // messenger.showSnackBar(
+                      //   const SnackBar(
+                      //       content: Text('Ride booked successfully')),
+                      // );
+                      // navigator.pop(true);
+
+                      //new code
                       messenger.showSnackBar(
                         const SnackBar(
                             content: Text('Ride booked successfully')),
                       );
-                      navigator.pop(true);
+                      if (navigator.canPop()) {
+                        navigator.pop(true);
+                      } else if (mounted) {
+                        context.go(AppRoutes.dashboard);
+                      }
                     } on DioException catch (error) {
                       if (!mounted) return;
                       final message = AppException.fromDio(error).message;
