@@ -24,10 +24,22 @@ import '../../core/network/token_store.dart';
 import '../../core/routing/pending_ride_redirect.dart';
 import '../../services/auth_service.dart';
 
+// class BookingFlowScreen extends StatefulWidget {
+//   const BookingFlowScreen({super.key, this.extra});
+
+//   final Object? extra;
+
+//   @override
+//   State<BookingFlowScreen> createState() => _BookingFlowScreenState();
+// }
+
+//new code
 class BookingFlowScreen extends StatefulWidget {
-  const BookingFlowScreen({super.key, this.extra});
+  const BookingFlowScreen(
+      {super.key, this.extra, this.cameFromSharedLink = false});
 
   final Object? extra;
+  final bool cameFromSharedLink;
 
   @override
   State<BookingFlowScreen> createState() => _BookingFlowScreenState();
@@ -977,7 +989,13 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                         const SnackBar(
                             content: Text('Ride booked successfully')),
                       );
-                      if (navigator.canPop()) {
+                      // if (navigator.canPop()) {
+                      //   navigator.pop(true);
+                      // } else if (mounted) {
+                      //   context.go(AppRoutes.dashboard);
+                      // }
+
+                      if (!widget.cameFromSharedLink) {
                         navigator.pop(true);
                       } else if (mounted) {
                         context.go(AppRoutes.dashboard);

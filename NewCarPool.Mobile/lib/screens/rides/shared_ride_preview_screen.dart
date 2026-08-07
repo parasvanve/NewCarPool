@@ -266,6 +266,7 @@ class _SharedRidePreviewScreenState extends State<SharedRidePreviewScreen> {
     if (_rideShim == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return BookingFlowScreen(extra: _rideShim);
+    // return BookingFlowScreen(extra: _rideShim);
+    return BookingFlowScreen(extra: _rideShim, cameFromSharedLink: true);
   }
 }
