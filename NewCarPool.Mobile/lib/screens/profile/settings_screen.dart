@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/widgets/app_design_system.dart';
 
+//new code
+import 'package:provider/provider.dart';
+import '../../providers/theme_provider.dart';
+
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -11,12 +15,14 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _notificationsEnabled = true;
-  bool _darkModePlaceholder = false;
+  // bool _darkModePlaceholder = false;
 
   @override
   Widget build(BuildContext context) {
+    //new code
+    final themeProvider = context.watch<ThemeProvider>();
     return Scaffold(
-      backgroundColor: AppDesignTokens.pageBg,
+      backgroundColor: AppDesignTokens.pageBackground(context),
       appBar: AppBar(title: const Text('Settings')),
       body: Align(
         alignment: Alignment.topCenter,
@@ -34,16 +40,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Card(
                 child: Column(
                   children: [
+                    // SwitchListTile(
+                    //   value: _darkModePlaceholder,
+                    //   onChanged: (v) => setState(() => _darkModePlaceholder = v),
+                    //   title: const Text('Dark Mode (Placeholder)'),
+                    //   subtitle: const Text('Theme switching will be enabled soon'),
+                    // ),
+                    //new codde
+
                     SwitchListTile(
-                      value: _darkModePlaceholder,
-                      onChanged: (v) => setState(() => _darkModePlaceholder = v),
-                      title: const Text('Dark Mode (Placeholder)'),
-                      subtitle: const Text('Theme switching will be enabled soon'),
+                      value: themeProvider.isDarkMode,
+                      onChanged: (v) =>
+                          context.read<ThemeProvider>().setDarkMode(v),
+                      title: const Text('Dark Mode'),
+                      subtitle:
+                          const Text('Switch between light and dark theme'),
                     ),
                     const Divider(height: 1),
                     SwitchListTile(
                       value: _notificationsEnabled,
-                      onChanged: (v) => setState(() => _notificationsEnabled = v),
+                      onChanged: (v) =>
+                          setState(() => _notificationsEnabled = v),
                       title: const Text('Notifications'),
                       subtitle: const Text('Ride alerts and booking updates'),
                     ),
@@ -54,11 +71,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               Card(
                 child: Column(
                   children: const [
-                    _SettingsTile(icon: Icons.privacy_tip_outlined, title: 'Privacy & Security'),
+                    _SettingsTile(
+                        icon: Icons.privacy_tip_outlined,
+                        title: 'Privacy & Security'),
                     Divider(height: 1),
                     _SettingsTile(icon: Icons.info_outline, title: 'About Us'),
                     Divider(height: 1),
-                    _SettingsTile(icon: Icons.logout, title: 'Logout', danger: true),
+                    _SettingsTile(
+                        icon: Icons.logout, title: 'Logout', danger: true),
                   ],
                 ),
               ),

@@ -599,14 +599,26 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // const accent = AppDesignTokens.brandStart;
+    // const pageBg = AppDesignTokens.pageBg;
+    // return Scaffold(
+    //   backgroundColor: pageBg,
+    //   appBar: AppBar(
+    //     title: const Text('Search Ride'),
+    //     backgroundColor: Colors.white,
+    //     surfaceTintColor: Colors.white,
+    //     elevation: 0,
+    //   ),
+
+    //new code
     const accent = AppDesignTokens.brandStart;
-    const pageBg = AppDesignTokens.pageBg;
+    final pageBg = AppDesignTokens.pageBackground(context);
     return Scaffold(
       backgroundColor: pageBg,
       appBar: AppBar(
         title: const Text('Search Ride'),
-        backgroundColor: Colors.white,
-        surfaceTintColor: Colors.white,
+        backgroundColor: AppDesignTokens.surface(context),
+        surfaceTintColor: AppDesignTokens.surface(context),
         elevation: 0,
       ),
       body: Form(

@@ -102,7 +102,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final profile = provider.profile;
 
     return Scaffold(
-      backgroundColor: AppDesignTokens.pageBg,
+      backgroundColor: AppDesignTokens.pageBackground(context),
       appBar: widget.showAppBar ? AppBar(title: const Text('Profile')) : null,
       body: provider.isLoading && profile == null
           ? const Center(child: CircularProgressIndicator())

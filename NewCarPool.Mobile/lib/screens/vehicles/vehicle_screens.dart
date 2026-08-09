@@ -35,7 +35,7 @@ class _MyVehiclesScreenState extends State<MyVehiclesScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<VehicleProvider>();
     return Scaffold(
-      backgroundColor: AppDesignTokens.pageBg,
+      backgroundColor: AppDesignTokens.pageBackground(context),
       appBar: AppBar(title: const Text('My Vehicles')),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openForm(context),
@@ -210,7 +210,7 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
   Widget build(BuildContext context) {
     final isEdit = widget.vehicle != null;
     return Scaffold(
-      backgroundColor: AppDesignTokens.pageBg,
+      backgroundColor: AppDesignTokens.pageBackground(context),
       appBar: AppBar(title: Text(isEdit ? 'Edit Vehicle' : 'Add Vehicle')),
       body: Align(
         alignment: Alignment.topCenter,

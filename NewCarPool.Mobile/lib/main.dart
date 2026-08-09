@@ -17,6 +17,7 @@ import 'services/ride_chat_service.dart';
 
 //new code
 import 'core/routing/deep_link_service.dart';
+import 'providers/theme_provider.dart';
 
 void main() {
   final dependencies = AppDependencies();
@@ -69,6 +70,8 @@ class _NewCarPoolAppState extends State<NewCarPoolApp> {
 
         //new code
         Provider.value(value: dependencies.tokenStore),
+        //new code
+        Provider.value(value: dependencies.appPreferences),
         Provider.value(value: dependencies.authService),
         Provider.value(value: dependencies.rideService),
 
@@ -103,12 +106,29 @@ class _NewCarPoolAppState extends State<NewCarPoolApp> {
             create: (_) => OfferRideProvider(dependencies.mapService)),
         ChangeNotifierProvider(
             create: (context) => RideChatProvider(context.read())),
+
+        //new code
+        ChangeNotifierProvider(
+            create: (_) => ThemeProvider(dependencies.appPreferences)),
       ],
-      child: MaterialApp.router(
-        debugShowCheckedModeBanner: false,
-        title: AppConstants.appName,
-        theme: AppTheme.light(),
-        routerConfig: AppRouter.router,
+      //child: MaterialApp.router(
+      //   debugShowCheckedModeBanner: false,
+      //   title: AppConstants.appName,
+      //   theme: AppTheme.light(),
+      //   routerConfig: AppRouter.router,
+      // ),
+      //new code
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, _) {
+          return MaterialApp.router(
+            debugShowCheckedModeBanner: false,
+            title: AppConstants.appName,
+            theme: AppTheme.light(),
+            darkTheme: AppTheme.dark(),
+            themeMode: themeProvider.themeMode,
+            routerConfig: AppRouter.router,
+          );
+        },
       ),
     );
   }

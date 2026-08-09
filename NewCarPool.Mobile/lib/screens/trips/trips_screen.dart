@@ -245,7 +245,8 @@ class _TripsScreenState extends State<TripsScreen> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FC),
+      // backgroundColor: const Color(0xFFF6F7FC),
+      backgroundColor: AppDesignTokens.pageBackground(context),
       appBar: widget.showAppBar ? AppBar(title: const Text('My Trips')) : null,
       body: Align(
         alignment: Alignment.topCenter,

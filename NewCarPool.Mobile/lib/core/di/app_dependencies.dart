@@ -9,10 +9,14 @@ import '../../services/tracking_service.dart';
 import '../../services/vehicle_service.dart';
 import '../network/api_client.dart';
 import '../network/token_store.dart';
+//new code
+import '../storage/app_preferences.dart';
 
 class AppDependencies {
   AppDependencies() {
     tokenStore = TokenStore();
+    //neew code
+    appPreferences = AppPreferences();
     apiClient = ApiClient(tokenStore);
     authService = AuthService(apiClient);
     rideService = RideService(apiClient);
@@ -26,6 +30,7 @@ class AppDependencies {
   }
 
   late final TokenStore tokenStore;
+  late final AppPreferences appPreferences;
   late final ApiClient apiClient;
   late final AuthService authService;
   late final RideService rideService;

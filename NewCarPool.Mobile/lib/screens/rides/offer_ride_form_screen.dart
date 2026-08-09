@@ -1510,7 +1510,7 @@ class _OfferRideFormScreenState extends State<OfferRideFormScreen> {
 
     if (isDesktop) {
       return Scaffold(
-        backgroundColor: AppDesignTokens.pageBg,
+        backgroundColor: AppDesignTokens.pageBackground(context),
         appBar: AppBar(title: const Text('Offer a Ride')),
         body: Padding(
           padding: const EdgeInsets.all(16),

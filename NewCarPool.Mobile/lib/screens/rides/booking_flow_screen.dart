@@ -598,430 +598,442 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
       gmap.LatLng(ride.destination.latitude, ride.destination.longitude),
     ];
 
-    return Scaffold(
-      appBar: AppBar(title: const Text('Confirm Booking')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    LocationDisplayFormatter.routeTitle(
-                      ride.origin,
-                      ride.destination,
+    // return Scaffold(
+    //   appBar: AppBar(title: const Text('Confirm Booking')),
+
+    //new code
+    return PopScope(
+      canPop: !widget.cameFromSharedLink,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) context.go(AppRoutes.dashboard);
+      },
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Confirm Booking')),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      LocationDisplayFormatter.routeTitle(
+                        ride.origin,
+                        ride.destination,
+                      ),
+                      style: Theme.of(context).textTheme.titleMedium,
                     ),
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                      'Driver: ${ride.driverName.isEmpty ? 'Driver' : ride.driverName}'),
-                  const SizedBox(height: 2),
-                  Text('Available seats: ${ride.availableSeats}'),
-                  const SizedBox(height: 2),
-                  Text('Price per seat: INR ${ride.pricePerSeat}'),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Vehicle: ${ride.vehicleName ?? 'Vehicle'} ${ride.vehicleNumber ?? ''}'
-                        .trim(),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                        'Driver: ${ride.driverName.isEmpty ? 'Driver' : ride.driverName}'),
+                    const SizedBox(height: 2),
+                    Text('Available seats: ${ride.availableSeats}'),
+                    const SizedBox(height: 2),
+                    Text('Price per seat: INR ${ride.pricePerSeat}'),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Vehicle: ${ride.vehicleName ?? 'Vehicle'} ${ride.vehicleNumber ?? ''}'
+                          .trim(),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Select on Map',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      ChoiceChip(
-                        label: const Text('Pickup'),
-                        selected: _mapPickMode == _BookingMapPickMode.pickup,
-                        onSelected: (_) => setState(
-                            () => _mapPickMode = _BookingMapPickMode.pickup),
-                      ),
-                      ChoiceChip(
-                        label: const Text('Drop'),
-                        selected: _mapPickMode == _BookingMapPickMode.drop,
-                        onSelected: (_) => setState(
-                            () => _mapPickMode = _BookingMapPickMode.drop),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 230,
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: gmap.GoogleMap(
-                        initialCameraPosition: gmap.CameraPosition(
-                          target: gmap.LatLng(
-                              _mapCenter.latitude, _mapCenter.longitude),
-                          zoom: 12.5,
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Select on Map',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Pickup'),
+                          selected: _mapPickMode == _BookingMapPickMode.pickup,
+                          onSelected: (_) => setState(
+                              () => _mapPickMode = _BookingMapPickMode.pickup),
                         ),
-                        onMapCreated: (c) {
-                          if (!_mapController.isCompleted) {
-                            _mapController.complete(c);
-                          }
-                        },
-                        onTap: (p) =>
-                            _setPointFromMap(LatLng(p.latitude, p.longitude)),
-                        myLocationEnabled: _canShowMyLocation,
-                        myLocationButtonEnabled: false,
-                        zoomControlsEnabled: true,
-                        markers: {
-                          _marker(
-                            id: 'ride-origin',
-                            type: 'pickup',
-                            latitude: ride.origin.latitude,
-                            longitude: ride.origin.longitude,
-                            hue: gmap.BitmapDescriptor.hueGreen,
+                        ChoiceChip(
+                          label: const Text('Drop'),
+                          selected: _mapPickMode == _BookingMapPickMode.drop,
+                          onSelected: (_) => setState(
+                              () => _mapPickMode = _BookingMapPickMode.drop),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 230,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: gmap.GoogleMap(
+                          initialCameraPosition: gmap.CameraPosition(
+                            target: gmap.LatLng(
+                                _mapCenter.latitude, _mapCenter.longitude),
+                            zoom: 12.5,
                           ),
-                          _marker(
-                            id: 'ride-destination',
-                            type: 'destination',
-                            latitude: ride.destination.latitude,
-                            longitude: ride.destination.longitude,
-                            hue: gmap.BitmapDescriptor.hueRed,
-                          ),
-                          if (_pickupPoint != null)
+                          onMapCreated: (c) {
+                            if (!_mapController.isCompleted) {
+                              _mapController.complete(c);
+                            }
+                          },
+                          onTap: (p) =>
+                              _setPointFromMap(LatLng(p.latitude, p.longitude)),
+                          myLocationEnabled: _canShowMyLocation,
+                          myLocationButtonEnabled: false,
+                          zoomControlsEnabled: true,
+                          markers: {
                             _marker(
-                              id: 'selected-pickup',
+                              id: 'ride-origin',
                               type: 'pickup',
-                              latitude: _pickupPoint!.latitude,
-                              longitude: _pickupPoint!.longitude,
+                              latitude: ride.origin.latitude,
+                              longitude: ride.origin.longitude,
                               hue: gmap.BitmapDescriptor.hueGreen,
-                              zIndexInt:
-                                  _mapPickMode == _BookingMapPickMode.pickup
-                                      ? 3
-                                      : 1,
                             ),
-                          if (_dropPoint != null)
                             _marker(
-                              id: 'selected-drop',
-                              type: 'drop',
-                              latitude: _dropPoint!.latitude,
-                              longitude: _dropPoint!.longitude,
-                              hue: gmap.BitmapDescriptor.hueBlue,
-                              zIndexInt:
-                                  _mapPickMode == _BookingMapPickMode.drop
-                                      ? 3
-                                      : 1,
+                              id: 'ride-destination',
+                              type: 'destination',
+                              latitude: ride.destination.latitude,
+                              longitude: ride.destination.longitude,
+                              hue: gmap.BitmapDescriptor.hueRed,
                             ),
-                          ...ride.intermediateStops.asMap().entries.map(
-                                (e) => _marker(
-                                  id: 'ride-stop-${e.key}',
-                                  type: 'stop-${e.key + 1}',
-                                  latitude: e.value.latitude,
-                                  longitude: e.value.longitude,
-                                  hue: gmap.BitmapDescriptor.hueBlue,
-                                  infoWindow: gmap.InfoWindow(
-                                    title: 'Stop ${e.key + 1}',
-                                    snippet: e.value.name,
+                            if (_pickupPoint != null)
+                              _marker(
+                                id: 'selected-pickup',
+                                type: 'pickup',
+                                latitude: _pickupPoint!.latitude,
+                                longitude: _pickupPoint!.longitude,
+                                hue: gmap.BitmapDescriptor.hueGreen,
+                                zIndexInt:
+                                    _mapPickMode == _BookingMapPickMode.pickup
+                                        ? 3
+                                        : 1,
+                              ),
+                            if (_dropPoint != null)
+                              _marker(
+                                id: 'selected-drop',
+                                type: 'drop',
+                                latitude: _dropPoint!.latitude,
+                                longitude: _dropPoint!.longitude,
+                                hue: gmap.BitmapDescriptor.hueBlue,
+                                zIndexInt:
+                                    _mapPickMode == _BookingMapPickMode.drop
+                                        ? 3
+                                        : 1,
+                              ),
+                            ...ride.intermediateStops.asMap().entries.map(
+                                  (e) => _marker(
+                                    id: 'ride-stop-${e.key}',
+                                    type: 'stop-${e.key + 1}',
+                                    latitude: e.value.latitude,
+                                    longitude: e.value.longitude,
+                                    hue: gmap.BitmapDescriptor.hueBlue,
+                                    infoWindow: gmap.InfoWindow(
+                                      title: 'Stop ${e.key + 1}',
+                                      snippet: e.value.name,
+                                    ),
                                   ),
                                 ),
+                          },
+                          polylines: {
+                            if (routeLinePoints.length > 1)
+                              gmap.Polyline(
+                                polylineId: const gmap.PolylineId('route'),
+                                points: routeLinePoints,
+                                width: 4,
+                                color: const Color(0xFF4F46E5),
                               ),
-                        },
-                        polylines: {
-                          if (routeLinePoints.length > 1)
-                            gmap.Polyline(
-                              polylineId: const gmap.PolylineId('route'),
-                              points: routeLinePoints,
-                              width: 4,
-                              color: const Color(0xFF4F46E5),
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Boarding / Pickup Point',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    if (_pickupPoint != null)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(_pickupPoint!.name),
+                            Text(
+                              LocationDisplayFormatter.compactAddress(
+                                  _pickupPoint),
+                              style: Theme.of(context).textTheme.bodySmall,
                             ),
-                        },
+                          ],
+                        ),
                       ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _useCurrentLocation,
+                          icon: const Icon(Icons.my_location),
+                          label: const Text('Use Current Location'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: _pickPickupFromSearch,
+                          icon: const Icon(Icons.search),
+                          label: const Text('Search Location'),
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: () => setState(
+                              () => _mapPickMode = _BookingMapPickMode.pickup),
+                          icon: const Icon(Icons.map_outlined),
+                          label: const Text('Select on Map'),
+                        ),
+                      ],
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Boarding / Pickup Point',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 8),
-                  if (_pickupPoint != null)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(_pickupPoint!.name),
-                          Text(
-                            LocationDisplayFormatter.compactAddress(
-                                _pickupPoint),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
+                    const SizedBox(height: 8),
+                    const Text('Or select from route stops'),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: routePoints
+                          .map(
+                            (p) => ChoiceChip(
+                              label: Text(p.name),
+                              selected: _pickupPoint?.name == p.name &&
+                                  _pickupPoint?.latitude == p.latitude,
+                              onSelected: (_) {
+                                final point = LatLng(p.latitude, p.longitude);
+                                setState(() {
+                                  _pickupPoint = p;
+                                  _pickupLockedFromSelection = false;
+                                  _mapCenter = point;
+                                  _mapPickMode = _BookingMapPickMode.pickup;
+                                });
+                                _logGeoPoint(
+                                  step: 'provider-state',
+                                  type: 'pickup',
+                                  point: p,
+                                );
+                                _moveMap(point, 14.5, type: 'pickup');
+                              },
+                            ),
+                          )
+                          .toList(),
                     ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      OutlinedButton.icon(
-                        onPressed: _useCurrentLocation,
-                        icon: const Icon(Icons.my_location),
-                        label: const Text('Use Current Location'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: _pickPickupFromSearch,
-                        icon: const Icon(Icons.search),
-                        label: const Text('Search Location'),
-                      ),
-                      OutlinedButton.icon(
-                        onPressed: () => setState(
-                            () => _mapPickMode = _BookingMapPickMode.pickup),
-                        icon: const Icon(Icons.map_outlined),
-                        label: const Text('Select on Map'),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Text('Or select from route stops'),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: routePoints
-                        .map(
-                          (p) => ChoiceChip(
-                            label: Text(p.name),
-                            selected: _pickupPoint?.name == p.name &&
-                                _pickupPoint?.latitude == p.latitude,
-                            onSelected: (_) {
-                              final point = LatLng(p.latitude, p.longitude);
-                              setState(() {
-                                _pickupPoint = p;
-                                _pickupLockedFromSelection = false;
-                                _mapCenter = point;
-                                _mapPickMode = _BookingMapPickMode.pickup;
-                              });
-                              _logGeoPoint(
-                                step: 'provider-state',
-                                type: 'pickup',
-                                point: p,
-                              );
-                              _moveMap(point, 14.5, type: 'pickup');
-                            },
-                          ),
-                        )
-                        .toList(),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Drop Point',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 8),
-                  DropdownButtonFormField<String>(
-                    initialValue: _dropPoint == null
-                        ? null
-                        : '${_dropPoint!.name}|${_dropPoint!.latitude}|${_dropPoint!.longitude}',
-                    hint: const Text('Select drop point'),
-                    items: dropOptions
-                        .map(
-                          (p) => DropdownMenuItem<String>(
-                            value: '${p.name}|${p.latitude}|${p.longitude}',
-                            child:
-                                Text(p.name, overflow: TextOverflow.ellipsis),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      final point = dropOptions.firstWhere(
-                        (p) =>
-                            '${p.name}|${p.latitude}|${p.longitude}' == value,
-                      );
-                      setState(() {
-                        _dropPoint = point;
-                        _dropLockedFromSelection = false;
-                        _mapCenter = LatLng(point.latitude, point.longitude);
-                        _mapPickMode = _BookingMapPickMode.drop;
-                      });
-                      _logGeoPoint(
-                        step: 'provider-state',
-                        type: 'drop',
-                        point: point,
-                      );
-                      _moveMap(
-                        LatLng(point.latitude, point.longitude),
-                        14.5,
-                        type: 'drop',
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton.icon(
-                    onPressed: () =>
-                        setState(() => _mapPickMode = _BookingMapPickMode.drop),
-                    icon: const Icon(Icons.map_outlined),
-                    label: const Text('Select Drop on Map'),
-                  ),
-                ],
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Drop Point',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      initialValue: _dropPoint == null
+                          ? null
+                          : '${_dropPoint!.name}|${_dropPoint!.latitude}|${_dropPoint!.longitude}',
+                      hint: const Text('Select drop point'),
+                      items: dropOptions
+                          .map(
+                            (p) => DropdownMenuItem<String>(
+                              value: '${p.name}|${p.latitude}|${p.longitude}',
+                              child:
+                                  Text(p.name, overflow: TextOverflow.ellipsis),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        final point = dropOptions.firstWhere(
+                          (p) =>
+                              '${p.name}|${p.latitude}|${p.longitude}' == value,
+                        );
+                        setState(() {
+                          _dropPoint = point;
+                          _dropLockedFromSelection = false;
+                          _mapCenter = LatLng(point.latitude, point.longitude);
+                          _mapPickMode = _BookingMapPickMode.drop;
+                        });
+                        _logGeoPoint(
+                          step: 'provider-state',
+                          type: 'drop',
+                          point: point,
+                        );
+                        _moveMap(
+                          LatLng(point.latitude, point.longitude),
+                          14.5,
+                          type: 'drop',
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () => setState(
+                          () => _mapPickMode = _BookingMapPickMode.drop),
+                      icon: const Icon(Icons.map_outlined),
+                      label: const Text('Select Drop on Map'),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Seats',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed:
-                            _seats > 1 ? () => setState(() => _seats--) : null,
-                        icon: const Icon(Icons.remove),
-                      ),
-                      Text('$_seats',
-                          style: const TextStyle(fontWeight: FontWeight.w700)),
-                      IconButton(
-                        onPressed: _seats < ride.availableSeats
-                            ? () => setState(() => _seats++)
-                            : null,
-                        icon: const Icon(Icons.add),
-                      ),
-                    ],
-                  ),
-                ],
+            const SizedBox(height: 12),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Seats',
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: _seats > 1
+                              ? () => setState(() => _seats--)
+                              : null,
+                          icon: const Icon(Icons.remove),
+                        ),
+                        Text('$_seats',
+                            style:
+                                const TextStyle(fontWeight: FontWeight.w700)),
+                        IconButton(
+                          onPressed: _seats < ride.availableSeats
+                              ? () => setState(() => _seats++)
+                              : null,
+                          icon: const Icon(Icons.add),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 10),
-          Text('Total: INR $total',
-              style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 18),
-          FilledButton(
-            onPressed: _submitting
-                ? null
-                // : () async {
-                //     if (_pickupPoint == null) {
+            const SizedBox(height: 10),
+            Text('Total: INR $total',
+                style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 18),
+            FilledButton(
+              onPressed: _submitting
+                  ? null
+                  // : () async {
+                  //     if (_pickupPoint == null) {
 
-                //new code
-                : () async {
-                    final alreadyAuthed =
-                        await _ensureLoggedIn(context, ride.id);
-                    if (!alreadyAuthed) return;
+                  //new code
+                  : () async {
+                      final alreadyAuthed =
+                          await _ensureLoggedIn(context, ride.id);
+                      if (!alreadyAuthed) return;
 
-                    if (_pickupPoint == null) {
-                      _showError('Pickup point is required');
-                      return;
-                    }
-                    if (_dropPoint == null) {
-                      _showError('Drop point is required');
-                      return;
-                    }
-                    if (_seats < 1) {
-                      _showError('Select at least 1 seat');
-                      return;
-                    }
-                    if (_seats > ride.availableSeats) {
-                      _showError('Selected seats exceed available seats');
-                      return;
-                    }
-
-                    final bookingProvider = context.read<BookingProvider>();
-                    final rideProvider = context.read<RideProvider>();
-                    final notificationProvider =
-                        context.read<NotificationProvider>();
-                    final messenger = ScaffoldMessenger.of(context);
-                    final navigator = Navigator.of(context);
-                    setState(() => _submitting = true);
-                    try {
-                      await bookingProvider.request(
-                        rideOfferId: ride.id,
-                        seatsBooked: _seats,
-                        pickup: _pickupPoint,
-                        drop: _dropPoint,
-                      );
-                      if (!mounted) return;
-                      await rideProvider.loadUpcomingActive();
-                      await bookingProvider.loadHistory();
-                      await notificationProvider.loadMine();
-                      await notificationProvider.loadUnreadCount();
-                      // messenger.showSnackBar(
-                      //   const SnackBar(
-                      //       content: Text('Ride booked successfully')),
-                      // );
-                      // navigator.pop(true);
-
-                      //new code
-                      messenger.showSnackBar(
-                        const SnackBar(
-                            content: Text('Ride booked successfully')),
-                      );
-                      // if (navigator.canPop()) {
-                      //   navigator.pop(true);
-                      // } else if (mounted) {
-                      //   context.go(AppRoutes.dashboard);
-                      // }
-
-                      if (!widget.cameFromSharedLink) {
-                        navigator.pop(true);
-                      } else if (mounted) {
-                        context.go(AppRoutes.dashboard);
+                      if (_pickupPoint == null) {
+                        _showError('Pickup point is required');
+                        return;
                       }
-                    } on DioException catch (error) {
-                      if (!mounted) return;
-                      final message = AppException.fromDio(error).message;
-                      messenger.showSnackBar(
-                        SnackBar(
-                            content: Text(message),
-                            backgroundColor: Colors.red),
-                      );
-                    } catch (error) {
-                      if (!mounted) return;
-                      messenger.showSnackBar(
-                        SnackBar(
-                            content: Text(error.toString()),
-                            backgroundColor: Colors.red),
-                      );
-                    } finally {
-                      if (mounted) setState(() => _submitting = false);
-                    }
-                  },
-            child: Text(_submitting ? 'Booking...' : 'Confirm Booking'),
-          ),
-        ],
+                      if (_dropPoint == null) {
+                        _showError('Drop point is required');
+                        return;
+                      }
+                      if (_seats < 1) {
+                        _showError('Select at least 1 seat');
+                        return;
+                      }
+                      if (_seats > ride.availableSeats) {
+                        _showError('Selected seats exceed available seats');
+                        return;
+                      }
+
+                      final bookingProvider = context.read<BookingProvider>();
+                      final rideProvider = context.read<RideProvider>();
+                      final notificationProvider =
+                          context.read<NotificationProvider>();
+                      final messenger = ScaffoldMessenger.of(context);
+                      final navigator = Navigator.of(context);
+                      setState(() => _submitting = true);
+                      try {
+                        await bookingProvider.request(
+                          rideOfferId: ride.id,
+                          seatsBooked: _seats,
+                          pickup: _pickupPoint,
+                          drop: _dropPoint,
+                        );
+                        if (!mounted) return;
+                        await rideProvider.loadUpcomingActive();
+                        await bookingProvider.loadHistory();
+                        await notificationProvider.loadMine();
+                        await notificationProvider.loadUnreadCount();
+                        // messenger.showSnackBar(
+                        //   const SnackBar(
+                        //       content: Text('Ride booked successfully')),
+                        // );
+                        // navigator.pop(true);
+
+                        //new code
+                        messenger.showSnackBar(
+                          const SnackBar(
+                              content: Text('Ride booked successfully')),
+                        );
+                        // if (navigator.canPop()) {
+                        //   navigator.pop(true);
+                        // } else if (mounted) {
+                        //   context.go(AppRoutes.dashboard);
+                        // }
+
+                        if (!widget.cameFromSharedLink) {
+                          navigator.pop(true);
+                        } else if (mounted) {
+                          context.go(AppRoutes.dashboard);
+                        }
+                      } on DioException catch (error) {
+                        if (!mounted) return;
+                        final message = AppException.fromDio(error).message;
+                        messenger.showSnackBar(
+                          SnackBar(
+                              content: Text(message),
+                              backgroundColor: Colors.red),
+                        );
+                      } catch (error) {
+                        if (!mounted) return;
+                        messenger.showSnackBar(
+                          SnackBar(
+                              content: Text(error.toString()),
+                              backgroundColor: Colors.red),
+                        );
+                      } finally {
+                        if (mounted) setState(() => _submitting = false);
+                      }
+                    },
+              child: Text(_submitting ? 'Booking...' : 'Confirm Booking'),
+            ),
+          ],
+        ),
       ),
     );
   }

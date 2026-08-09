@@ -63,7 +63,7 @@ class _RideResultsScreenState extends State<RideResultsScreen> {
     final provider = context.watch<RideProvider>();
     final rides = _visibleRides(provider.rides);
     return Scaffold(
-      backgroundColor: AppDesignTokens.pageBg,
+      backgroundColor: AppDesignTokens.pageBackground(context),
       appBar: AppBar(title: const Text('Ride Results')),
       body: Column(
         children: [
