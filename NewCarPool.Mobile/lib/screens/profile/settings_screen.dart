@@ -3,8 +3,15 @@ import 'package:flutter/material.dart';
 import '../../core/widgets/app_design_system.dart';
 
 //new code
+// import 'package:provider/provider.dart';
+// import '../../providers/theme_provider.dart';
+
+//new code
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import '../../providers/theme_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../core/constants/app_routes.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -68,17 +75,67 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               const SizedBox(height: 10),
+              // Card(
+              //   child: Column(
+              //     children: const [
+              //       _SettingsTile(
+              //           icon: Icons.privacy_tip_outlined,
+              //           title: 'Privacy & Security'),
+              //       Divider(height: 1),
+              //       _SettingsTile(icon: Icons.info_outline, title: 'About Us'),
+              //       Divider(height: 1),
+              //       _SettingsTile(
+              //           icon: Icons.logout, title: 'Logout', danger: true),
+              //     ],
+              //   ),
+              // ),
+
               Card(
                 child: Column(
-                  children: const [
+                  children: [
                     _SettingsTile(
-                        icon: Icons.privacy_tip_outlined,
-                        title: 'Privacy & Security'),
-                    Divider(height: 1),
-                    _SettingsTile(icon: Icons.info_outline, title: 'About Us'),
-                    Divider(height: 1),
+                      icon: Icons.privacy_tip_outlined,
+                      title: 'Privacy & Security',
+                      onTap: () => context.push(AppRoutes.privacySecurity),
+                    ),
+                    const Divider(height: 1),
                     _SettingsTile(
-                        icon: Icons.logout, title: 'Logout', danger: true),
+                      icon: Icons.info_outline,
+                      title: 'About Us',
+                      onTap: () => context.push(AppRoutes.aboutUs),
+                    ),
+                    const Divider(height: 1),
+                    _SettingsTile(
+                      icon: Icons.logout,
+                      title: 'Logout',
+                      danger: true,
+                      onTap: () async {
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (dialogContext) => AlertDialog(
+                            title: const Text('Logout'),
+                            content:
+                                const Text('Are you sure you want to logout?'),
+                            actions: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(false),
+                                child: const Text('Cancel'),
+                              ),
+                              FilledButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(true),
+                                child: const Text('Logout'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true && context.mounted) {
+                          await context.read<AuthProvider>().logout();
+                          if (context.mounted) context.go(AppRoutes.login);
+                        }
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -90,15 +147,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
+// class _SettingsTile extends StatelessWidget {
+//   const _SettingsTile({
+//     required this.icon,
+//     required this.title,
+//     this.danger = false,
+//   });
+
+//   final IconData icon;
+//   final String title;
+//   final bool danger;
+
+//   @override
+//   Widget build(BuildContext context) {
+//     final color = danger ? Colors.red : null;
+//     return ListTile(
+//       leading: Icon(icon, color: color),
+//       title: Text(title, style: TextStyle(color: color)),
+//       trailing: Icon(Icons.chevron_right, color: color),
+//     );
+//   }
+// }
+
 class _SettingsTile extends StatelessWidget {
   const _SettingsTile({
     required this.icon,
     required this.title,
+    required this.onTap,
     this.danger = false,
   });
 
   final IconData icon;
   final String title;
+  final VoidCallback onTap;
   final bool danger;
 
   @override
@@ -108,6 +189,7 @@ class _SettingsTile extends StatelessWidget {
       leading: Icon(icon, color: color),
       title: Text(title, style: TextStyle(color: color)),
       trailing: Icon(Icons.chevron_right, color: color),
+      onTap: onTap,
     );
   }
 }

@@ -12,8 +12,13 @@ class AppRoutes {
   static const notifications = '/notifications';
   static const profile = '/profile';
   static const payments = '/payments';
+  // static const settings = '/settings';
+  // static const helpSupport = '/help-support';
+  //new code
   static const settings = '/settings';
   static const helpSupport = '/help-support';
+  static const privacySecurity = '/privacy-security';
+  static const aboutUs = '/about-us';
   static const booking = '/booking';
   static const driverRequests = '/driver-requests';
   static const tracking = '/tracking';

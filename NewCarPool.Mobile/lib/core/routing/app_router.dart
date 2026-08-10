@@ -12,7 +12,12 @@ import '../../screens/notifications/notification_screen.dart';
 import '../../screens/payments/payment_screen.dart';
 import '../../screens/profile/profile_screen.dart';
 import '../../screens/profile/settings_screen.dart';
+// import '../../screens/profile/help_support_screen.dart';
+//new code
 import '../../screens/profile/help_support_screen.dart';
+import '../../screens/profile/privacy_security_screen.dart';
+import '../../screens/profile/about_us_screen.dart';
+
 import '../../screens/rides/booking_flow_screen.dart';
 import '../../screens/rides/driver_requests_screen.dart';
 import '../../screens/rides/live_tracking_screen.dart';
@@ -101,9 +106,21 @@ class AppRouter {
       GoRoute(
           path: AppRoutes.settings,
           pageBuilder: (_, __) => _fadeSlidePage(const SettingsScreen())),
+      // GoRoute(
+      //     path: AppRoutes.helpSupport,
+      //     pageBuilder: (_, __) => _fadeSlidePage(const HelpSupportScreen())),
+      //new code
       GoRoute(
           path: AppRoutes.helpSupport,
           pageBuilder: (_, __) => _fadeSlidePage(const HelpSupportScreen())),
+      GoRoute(
+          path: AppRoutes.privacySecurity,
+          pageBuilder: (_, __) =>
+              _fadeSlidePage(const PrivacySecurityScreen())),
+      GoRoute(
+          path: AppRoutes.aboutUs,
+          pageBuilder: (_, __) => _fadeSlidePage(const AboutUsScreen())),
+
       GoRoute(
           path: AppRoutes.booking,
           pageBuilder: (_, state) =>
