@@ -64,7 +64,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
             runSpacing: 8,
             children: [
               Chip(
-                  label: Text('Driver + Passenger'),
+                  label: Text('Rider + Passenger'),
                   avatar: Icon(Icons.swap_horiz, size: 16)),
               Chip(
                   label: Text('Quick Onboarding'),

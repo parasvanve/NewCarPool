@@ -168,7 +168,7 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12),
             child: SwitchListTile(
               contentPadding: EdgeInsets.zero,
-              title: const Text('Auto follow driver'),
+              title: const Text('Auto follow rider'),
               value: autoFollow,
               onChanged: (value) => setState(() => autoFollow = value),
             ),

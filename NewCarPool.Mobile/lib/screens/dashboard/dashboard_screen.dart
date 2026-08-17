@@ -1658,25 +1658,29 @@ class _WhyNewCarpoolCard extends StatelessWidget {
         Icons.verified_user_outlined,
         'Verified Drivers',
         'Safe & secure users',
-        const Color(0xFF4F46E5)
+        const Color(0xFF4F46E5),
+        'Every driver is KYC-verified and background-checked before approval.',
       ),
       (
         Icons.savings_outlined,
         'Affordable Rides',
         'Save on every ride',
-        const Color(0xFF22C55E)
+        const Color(0xFF22C55E),
+        'Transparent, upfront pricing with zero hidden charges.',
       ),
       (
         Icons.schedule_outlined,
         'On-time Travel',
         'Reliable schedules',
-        const Color(0xFFF59E0B)
+        const Color(0xFFF59E0B),
+        'Live trip tracking keeps every pickup and drop right on time.',
       ),
       (
         Icons.support_agent_outlined,
         '24/7 Support',
         'Help when needed',
-        const Color(0xFF06B6D4)
+        const Color(0xFF06B6D4),
+        'Real support agents, ready to help any hour of the day.',
       ),
     ];
     return Card(
@@ -1698,7 +1702,7 @@ class _WhyNewCarpoolCard extends StatelessWidget {
                   crossAxisCount: 2,
                   mainAxisSpacing: 12,
                   crossAxisSpacing: 12,
-                  mainAxisExtent: 104,
+                  mainAxisExtent: 136,
                 ),
                 itemBuilder: (_, i) => _WhyBenefitTile(item: items[i]),
               )
@@ -1720,53 +1724,129 @@ class _WhyNewCarpoolCard extends StatelessWidget {
   }
 }
 
-class _WhyBenefitTile extends StatelessWidget {
+class _WhyBenefitTile extends StatefulWidget {
   const _WhyBenefitTile({required this.item});
 
-  final (IconData, String, String, Color) item;
+  final (IconData, String, String, Color, String) item;
+
+  @override
+  State<_WhyBenefitTile> createState() => _WhyBenefitTileState();
+}
+
+class _WhyBenefitTileState extends State<_WhyBenefitTile> {
+  bool _hovering = false;
+
+  void _setHover(bool value) {
+    if (_hovering == value) return;
+    setState(() => _hovering = value);
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      constraints: const BoxConstraints(minHeight: 105),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFF),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 14,
-            backgroundColor: item.$4.withValues(alpha: 0.15),
-            child: Icon(item.$1, color: item.$4, size: 16),
+    final item = widget.item;
+    final color = item.$4;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => _setHover(true),
+      onExit: (_) => _setHover(false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.identity()..scale(_hovering ? 1.03 : 1.0),
+        transformAlignment: Alignment.center,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: _hovering
+              ? color.withValues(alpha: 0.08)
+              : const Color(0xFFF8FAFF),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: _hovering
+                ? color.withValues(alpha: 0.55)
+                : const Color(0xFFE2E8F0),
+            width: _hovering ? 1.4 : 1,
           ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+          boxShadow: _hovering
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.25),
+                    blurRadius: 16,
+                    offset: const Offset(0, 6),
+                  ),
+                ]
+              : const [],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
               children: [
-                Text(
-                  item.$2,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w700, fontSize: 12),
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  width: _hovering ? 30 : 28,
+                  height: _hovering ? 30 : 28,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: color.withValues(alpha: _hovering ? 0.22 : 0.15),
+                  ),
+                  child: Icon(item.$1, color: color, size: 16),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  item.$3,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style:
-                      const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.$2,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700, fontSize: 12),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        item.$3,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 11, color: Color(0xFF64748B)),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
-          ),
-        ],
+            AnimatedSize(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.topCenter,
+              child: _hovering
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 220),
+                        opacity: _hovering ? 1 : 0,
+                        child: Text(
+                          item.$5,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            height: 1.3,
+                            color: color,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    )
+                  : const SizedBox(width: double.infinity, height: 0),
+            ),
+          ],
+        ),
       ),
     );
   }

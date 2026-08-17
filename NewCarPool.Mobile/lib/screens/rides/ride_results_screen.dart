@@ -225,9 +225,7 @@ class _RideCard extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                            ride.driverName.isEmpty
-                                ? 'Driver'
-                                : ride.driverName,
+                            ride.driverName.isEmpty ? 'Rider' : ride.driverName,
                             style:
                                 const TextStyle(fontWeight: FontWeight.w700)),
                         const SizedBox(height: 2),

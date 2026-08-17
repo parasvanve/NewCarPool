@@ -668,7 +668,7 @@ class _UpcomingTab extends StatelessWidget {
               ride: ride,
               statusBadge: ride.status == 3 ? 'Ride Started' : 'Booked',
               primaryLabel: 'View Details',
-              secondaryLabel: 'Chat with Driver',
+              secondaryLabel: 'Chat with Rider',
               tertiaryLabel: 'Cancel Booking',
               bookedSeats: booking.seatsBooked,
               yourPickupName: booking.passengerPickup?.name,
@@ -864,7 +864,7 @@ class _CompletedOfferedRideCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    ride.driverName.isEmpty ? 'Driver' : ride.driverName,
+                    ride.driverName.isEmpty ? 'Rider' : ride.driverName,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -1431,7 +1431,7 @@ class _RideCard extends StatelessWidget {
                 const SizedBox(width: 6),
                 Expanded(
                     child: Text(
-                        ride.driverName.isEmpty ? 'Driver' : ride.driverName)),
+                        ride.driverName.isEmpty ? 'Rider' : ride.driverName)),
               ],
             ),
             const SizedBox(height: 10),
@@ -1445,7 +1445,7 @@ class _RideCard extends StatelessWidget {
             const SizedBox(height: 10),
             Row(
               children: [
-                Expanded(child: Text('â‚¹${ride.pricePerSeat} / seat')),
+                Expanded(child: Text('${ride.pricePerSeat} / seat')),
                 Expanded(
                   child: Text(
                     bookedSeats == null
@@ -1537,3 +1537,5 @@ class _TripFilterChip extends StatelessWidget {
         label: Text(label), selected: selected, onSelected: (_) => onTap());
   }
 }
+
+//â‚¹

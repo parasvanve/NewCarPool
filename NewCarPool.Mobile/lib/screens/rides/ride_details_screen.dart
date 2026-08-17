@@ -578,7 +578,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                                           builder: (_) =>
                                               RideChatScreen(ride: ride))),
                                   icon: const Icon(Icons.chat_bubble_outline),
-                                  label: const Text('Chat with Driver'),
+                                  label: const Text('Chat with Rider'),
                                 ),
                               ),
                               const SizedBox(width: 10),
@@ -672,7 +672,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                           MaterialPageRoute(
                               builder: (_) => RideChatScreen(ride: ride))),
                       icon: const Icon(Icons.chat_bubble_outline),
-                      label: const Text('Chat with Driver'),
+                      label: const Text('Chat with Rider'),
                     ),
                   ),
                   const SizedBox(width: 10),
@@ -1057,7 +1057,7 @@ class _MapCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Text(
-                        'Ride Started\n${trackingMessage == null || trackingMessage!.isEmpty ? 'Driver is on the way' : trackingMessage!}',
+                        'Ride Started\n${trackingMessage == null || trackingMessage!.isEmpty ? 'Rider is on the way' : trackingMessage!}',
                         style: const TextStyle(
                             color: Colors.white, fontWeight: FontWeight.w700),
                       ),
@@ -1137,7 +1137,7 @@ class _MapCard extends StatelessWidget {
                                 offset: Offset(0, 3)),
                           ]),
                       child: Text(
-                          'Driver on the way\n${distanceKm.toStringAsFixed(1)} km'),
+                          'Rider on the way\n${distanceKm.toStringAsFixed(1)} km'),
                     ),
                   ),
               ],
@@ -1231,7 +1231,7 @@ class _RightPanel extends StatelessWidget {
                     trackingMessage ??
                         (isDriver
                             ? 'Your live location is being shared with passengers.'
-                            : 'Live tracking has started. You can see driver’s real-time location.'),
+                            : 'Live tracking has started. You can see rider’s real-time location.'),
                     style: const TextStyle(
                         color: Color(0xFF1D4ED8), fontWeight: FontWeight.w600),
                   ),

@@ -557,7 +557,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
           child: Padding(
             padding: EdgeInsets.all(16),
             child: Text(
-              'You are the driver of this ride. Booking is disabled.',
+              'You are the rider of this ride. Booking is disabled.',
               textAlign: TextAlign.center,
             ),
           ),
