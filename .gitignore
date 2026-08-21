@@ -361,3 +361,18 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+
+# Sensitive config files (custom - added for security)
+**/appsettings.json
+**/appsettings.Development.json
+**/appsettings.Production.json
+
+# Environment files
+.env
+.env.local
+
+# Flutter/Android signing files
+**/android/key.properties
+**/android/app/*.keystore
+**/android/app/*.jks
