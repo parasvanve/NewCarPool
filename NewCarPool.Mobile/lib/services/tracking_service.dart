@@ -19,6 +19,66 @@ class TrackingService {
   Position? _lastPublishedPosition;
   String? _connectedRideOfferId;
 
+  // Future<void> connect(
+  //   String rideOfferId,
+  //   void Function(Map<String, dynamic>) onLocation, {
+  //   VoidCallback? onTrackingStarted,
+  //   VoidCallback? onTrackingStopped,
+  // }) async {
+  //   if (_connection?.state == HubConnectionState.Connected &&
+  //       _connectedRideOfferId == rideOfferId) {
+  //     return;
+  //   }
+
+  //   // await disconnect();
+  //   // final token = await _tokenStore.accessToken;
+  //   // // _connection = HubConnectionBuilder()
+  //   // //     .withUrl(
+  //   // //       '${AppConfig.apiBaseUrl}/hubs/tracking',
+  //   // //       options: HttpConnectionOptions(
+  //   // //           accessTokenFactory: () async => token ?? ''),
+  //   // //     )
+  //   // //     .withAutomaticReconnect()
+  //   // //     .build();
+
+  //   // //new code
+  //   // _connection = HubConnectionBuilder()
+  //   //     .withUrl(
+  //   //       '${AppConfig.apiBaseUrl}/hubs/notifications',
+  //   //       options: HttpConnectionOptions(
+  //   //         accessTokenFactory: () async => await _tokenStore.accessToken ?? '',
+  //   //       ),
+  //   //     )
+  //   //     .withAutomaticReconnect()
+  //   //     .build();
+
+  //   await disconnect();
+  //   _connection = HubConnectionBuilder()
+  //       .withUrl(
+  //         '${AppConfig.apiBaseUrl}/hubs/tracking', // ✅ correct hub
+  //         options: HttpConnectionOptions(
+  //           accessTokenFactory: () async => await _tokenStore.accessToken ?? '',
+  //         ),
+  //       )
+  //       .withAutomaticReconnect()
+  //       .build();
+  //   _connectedRideOfferId = rideOfferId;
+
+  //   void handleLocationPayload(List<Object?>? args) {
+  //     if (args != null && args.isNotEmpty) {
+  //       onLocation(Map<String, dynamic>.from(args.first as Map));
+  //     }
+  //   }
+
+  //   _connection!.on('locationUpdated', handleLocationPayload);
+  //   _connection!.on('DriverLocationUpdated', handleLocationPayload);
+  //   _connection!.on('TrackingStarted', (_) => onTrackingStarted?.call());
+  //   _connection!.on('TrackingStopped', (_) => onTrackingStopped?.call());
+
+  //   await _connection!.start();
+  //   await _connection!.invoke('JoinRide', args: [rideOfferId]);
+  // }
+
   Future<void> connect(
     String rideOfferId,
     void Function(Map<String, dynamic>) onLocation, {
@@ -30,32 +90,11 @@ class TrackingService {
       return;
     }
 
-    // await disconnect();
-    // final token = await _tokenStore.accessToken;
-    // // _connection = HubConnectionBuilder()
-    // //     .withUrl(
-    // //       '${AppConfig.apiBaseUrl}/hubs/tracking',
-    // //       options: HttpConnectionOptions(
-    // //           accessTokenFactory: () async => token ?? ''),
-    // //     )
-    // //     .withAutomaticReconnect()
-    // //     .build();
-
-    // //new code
-    // _connection = HubConnectionBuilder()
-    //     .withUrl(
-    //       '${AppConfig.apiBaseUrl}/hubs/notifications',
-    //       options: HttpConnectionOptions(
-    //         accessTokenFactory: () async => await _tokenStore.accessToken ?? '',
-    //       ),
-    //     )
-    //     .withAutomaticReconnect()
-    //     .build();
-
     await disconnect();
+
     _connection = HubConnectionBuilder()
         .withUrl(
-          '${AppConfig.apiBaseUrl}/hubs/tracking', // ✅ correct hub
+          '${AppConfig.apiBaseUrl}/hubs/tracking',
           options: HttpConnectionOptions(
             accessTokenFactory: () async => await _tokenStore.accessToken ?? '',
           ),
