@@ -1,4 +1,4 @@
-package com.example.new_car_pool
+package com.kallwiktechnology.carpool
 
 import io.flutter.embedding.android.FlutterActivity
 

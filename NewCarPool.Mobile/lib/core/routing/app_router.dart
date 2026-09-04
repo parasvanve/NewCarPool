@@ -128,9 +128,13 @@ class AppRouter {
       GoRoute(
           path: AppRoutes.driverRequests,
           pageBuilder: (_, __) => _fadeSlidePage(const DriverRequestsScreen())),
+      // GoRoute(
+      //     path: AppRoutes.tracking,
+      //     pageBuilder: (_, __) => _fadeSlidePage(const LiveTrackingScreen())),
+
       GoRoute(
           path: AppRoutes.tracking,
-          pageBuilder: (_, __) => _fadeSlidePage(const LiveTrackingScreen())),
+          builder: (_, __) => const LiveTrackingScreen()),
       //   GoRoute(
       //       path: AppRoutes.rideDetails,
       //       pageBuilder: (_, state) => _fadeSlidePage(RideDetailsScreen(extra: state.extra))),
