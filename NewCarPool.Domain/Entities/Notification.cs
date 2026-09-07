@@ -14,6 +14,6 @@ public sealed class Notification
     public bool IsRead { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? ReadAtUtc { get; set; }
-
+   
     public User User { get; set; } = default!;
 }

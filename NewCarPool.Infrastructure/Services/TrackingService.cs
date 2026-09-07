@@ -1,4 +1,191 @@
+//using NewCarPool.Application.Common;
+//using NewCarPool.Application.DTOs.Tracking;
+//using NewCarPool.Application.Interfaces.Repositories;
+//using NewCarPool.Application.Interfaces.Services;
+//using NewCarPool.Domain.Entities;
+//using NewCarPool.Domain.Enums;
+//using NewCarPool.Infrastructure.Data;
+//using Microsoft.EntityFrameworkCore;
+
+//namespace NewCarPool.Infrastructure.Services;
+
+//public sealed class TrackingService : ITrackingService
+//{
+//    private const int LocationDbSaveIntervalSeconds = 60;
+//    private const double LocationMinDistanceMeters = 30;
+
+//    private readonly IRideRepository _rides;
+//    private readonly IUnitOfWork _unitOfWork;
+//    private readonly NewCarPoolDbContext _dbContext;
+
+//    public TrackingService(IRideRepository rides, IUnitOfWork unitOfWork, NewCarPoolDbContext dbContext)
+//    {
+//        _rides = rides;
+//        _unitOfWork = unitOfWork;
+//        _dbContext = dbContext;
+//    }
+
+//    public async Task<LocationUpdateDto> AddLocationUpdateAsync(Guid driverId, LocationUpdateRequest request, CancellationToken cancellationToken)
+//    {
+//        var ride = await _rides.GetRideByIdAsync(request.RideOfferId, cancellationToken)
+//            ?? throw new ApiException("Ride not found.", 404);
+
+//        if (ride.DriverId != driverId)
+//        {
+//            throw new ApiException("Only the driver can publish tracking for this ride.", 403);
+//        }
+
+//        if (ride.Status != RideStatus.Started)
+//        {
+//            throw new ApiException("Tracking is not available for this ride status.");
+//        }
+
+//        var createdAtUtc = DateTime.UtcNow;
+//        if (!ShouldPersistLocation(ride, request, createdAtUtc))
+//        {
+//            return new LocationUpdateDto(
+//                ride.Id,
+//                driverId,
+//                request.Latitude,
+//                request.Longitude,
+//                request.Heading,
+//                request.SpeedKph,
+//                createdAtUtc);
+//        }
+
+//        var locationUpdate = new RideLocationUpdate
+//        {
+//            Id = Guid.NewGuid(),
+//            RideOfferId = ride.Id,
+//            DriverId = driverId,
+//            Latitude = request.Latitude,
+//            Longitude = request.Longitude,
+//            Heading = request.Heading,
+//            SpeedKph = request.SpeedKph,
+//            CreatedAtUtc = createdAtUtc
+//        };
+//        ride.LastDriverLatitude = request.Latitude;
+//        ride.LastDriverLongitude = request.Longitude;
+//        ride.LastDriverHeading = request.Heading;
+//        ride.LastDriverSpeedKph = request.SpeedKph;
+//        ride.LastDriverLocationAtUtc = createdAtUtc;
+//        ride.UpdatedAtUtc = createdAtUtc;
+
+//        await _rides.AddLocationUpdateAsync(locationUpdate, cancellationToken);
+//        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+//        return new LocationUpdateDto(
+//            locationUpdate.RideOfferId,
+//            locationUpdate.DriverId,
+//            locationUpdate.Latitude,
+//            locationUpdate.Longitude,
+//            locationUpdate.Heading,
+//            locationUpdate.SpeedKph,
+//            locationUpdate.CreatedAtUtc);
+//    }
+
+//    private static bool ShouldPersistLocation(RideOffer ride, LocationUpdateRequest request, DateTime nowUtc)
+//    {
+//        if (ride.LastDriverLocationAtUtc is null ||
+//            ride.LastDriverLatitude is null ||
+//            ride.LastDriverLongitude is null)
+//        {
+//            return true;
+//        }
+
+//        var seconds = (nowUtc - ride.LastDriverLocationAtUtc.Value).TotalSeconds;
+//        var meters = DistanceMeters(
+//            ride.LastDriverLatitude.Value,
+//            ride.LastDriverLongitude.Value,
+//            request.Latitude,
+//            request.Longitude);
+
+//        return seconds >= LocationDbSaveIntervalSeconds || meters >= LocationMinDistanceMeters;
+//    }
+
+//    private static double DistanceMeters(double lat1, double lon1, double lat2, double lon2)
+//    {
+//        const double earthRadiusMeters = 6371000;
+//        var dLat = DegreesToRadians(lat2 - lat1);
+//        var dLon = DegreesToRadians(lon2 - lon1);
+//        var rLat1 = DegreesToRadians(lat1);
+//        var rLat2 = DegreesToRadians(lat2);
+//        var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+//                Math.Cos(rLat1) * Math.Cos(rLat2) *
+//                Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+//        var c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+//        return earthRadiusMeters * c;
+//    }
+
+//    private static double DegreesToRadians(double degrees) => degrees * Math.PI / 180;
+
+//    public async Task<LocationUpdateDto> GetLatestLocationAsync(Guid userId, Guid rideOfferId, CancellationToken cancellationToken)
+//    {
+//        var ride = await _rides.GetRideByIdAsync(rideOfferId, cancellationToken)
+//            ?? throw new ApiException("Ride not found.", 404);
+
+//        await EnsureCanAccessTrackingAsync(userId, rideOfferId, cancellationToken);
+
+//        var latest = await _dbContext.RideLocationUpdates
+//            .AsNoTracking()
+//            .Where(x => x.RideOfferId == rideOfferId)
+//            .OrderByDescending(x => x.CreatedAtUtc)
+//            .FirstOrDefaultAsync(cancellationToken);
+
+//        if (latest == null)
+//        {
+//            throw new ApiException("Waiting for driver location.", 404);
+//        }
+
+//        return new LocationUpdateDto(
+//            latest.RideOfferId,
+//            latest.DriverId,
+//            latest.Latitude,
+//            latest.Longitude,
+//            latest.Heading,
+//            latest.SpeedKph,
+//            latest.CreatedAtUtc);
+//    }
+
+//    public async Task EnsureCanAccessTrackingAsync(Guid userId, Guid rideOfferId, CancellationToken cancellationToken)
+//    {
+//        var ride = await _dbContext.RideOffers
+//            .AsNoTracking()
+//            .Where(x => x.Id == rideOfferId)
+//            .Select(x => new { x.Id, x.DriverId, x.Status })
+//            .FirstOrDefaultAsync(cancellationToken)
+//            ?? throw new ApiException("Ride not found.", 404);
+
+//        if (ride.Status != RideStatus.Started)
+//        {
+//            throw new ApiException("Tracking is not available for this ride status.");
+//        }
+
+//        if (ride.DriverId == userId)
+//        {
+//            return;
+//        }
+
+//        var isBookedPassenger = await _dbContext.RideBookings
+//            .AsNoTracking()
+//            .AnyAsync(
+//                x => x.RideOfferId == rideOfferId
+//                     && x.PassengerId == userId
+//                     && x.Status == BookingStatus.Confirmed,
+//                cancellationToken);
+
+//        if (!isBookedPassenger)
+//        {
+//            throw new ApiException("You are not allowed to access this ride location.", 403);
+//        }
+//    }
+//}
+
+
+
+//new code 
 using NewCarPool.Application.Common;
+using NewCarPool.Application.DTOs.Notifications;
 using NewCarPool.Application.DTOs.Tracking;
 using NewCarPool.Application.Interfaces.Repositories;
 using NewCarPool.Application.Interfaces.Services;
@@ -13,16 +200,23 @@ public sealed class TrackingService : ITrackingService
 {
     private const int LocationDbSaveIntervalSeconds = 60;
     private const double LocationMinDistanceMeters = 30;
+    private const double StopReachedRadiusMeters = 150;
 
     private readonly IRideRepository _rides;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NewCarPoolDbContext _dbContext;
+    private readonly INotificationService _notifications;
 
-    public TrackingService(IRideRepository rides, IUnitOfWork unitOfWork, NewCarPoolDbContext dbContext)
+    public TrackingService(
+        IRideRepository rides,
+        IUnitOfWork unitOfWork,
+        NewCarPoolDbContext dbContext,
+        INotificationService notifications)
     {
         _rides = rides;
         _unitOfWork = unitOfWork;
         _dbContext = dbContext;
+        _notifications = notifications;
     }
 
     public async Task<LocationUpdateDto> AddLocationUpdateAsync(Guid driverId, LocationUpdateRequest request, CancellationToken cancellationToken)
@@ -39,6 +233,8 @@ public sealed class TrackingService : ITrackingService
         {
             throw new ApiException("Tracking is not available for this ride status.");
         }
+
+        await CheckStopArrivalsAsync(ride, request.Latitude, request.Longitude, cancellationToken);
 
         var createdAtUtc = DateTime.UtcNow;
         if (!ShouldPersistLocation(ride, request, createdAtUtc))
@@ -82,6 +278,40 @@ public sealed class TrackingService : ITrackingService
             locationUpdate.Heading,
             locationUpdate.SpeedKph,
             locationUpdate.CreatedAtUtc);
+    }
+
+    private async Task CheckStopArrivalsAsync(RideOffer ride, double latitude, double longitude, CancellationToken cancellationToken)
+    {
+        var nextStop = ride.IntermediateStops
+            .Where(s => s.ReachedAtUtc == null)
+            .OrderBy(s => s.StopOrder)
+            .FirstOrDefault();
+
+        if (nextStop is null) return;
+
+        var distance = DistanceMeters(latitude, longitude, nextStop.Latitude, nextStop.Longitude);
+        if (distance > StopReachedRadiusMeters) return;
+
+        nextStop.ReachedAtUtc = DateTime.UtcNow;
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        var passengerIds = ride.Bookings
+            .Where(b => b.Status == BookingStatus.Confirmed)
+            .Select(b => b.PassengerId)
+            .Distinct();
+
+        foreach (var passengerId in passengerIds)
+        {
+            await _notifications.CreateAsync(
+                passengerId,
+                new CreateNotificationRequest(
+                    "Driver is nearby",
+                    $"Your driver is near {nextStop.Name}.",
+                    NotificationType.StopReached,
+                    ride.Id,
+                    null),
+                cancellationToken);
+        }
     }
 
     private static bool ShouldPersistLocation(RideOffer ride, LocationUpdateRequest request, DateTime nowUtc)

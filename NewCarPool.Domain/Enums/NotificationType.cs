@@ -11,5 +11,6 @@ public enum NotificationType
     BookingConfirmed = 6,
     RideStarted = 7,
     RideCompleted = 8,
-    System = 9
+    System = 9,
+    StopReached = 10   // NEW
 }

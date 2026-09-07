@@ -10,6 +10,7 @@ public sealed class RideStop
     public double Longitude { get; set; }
     public int StopOrder { get; set; }
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+    public DateTime? ReachedAtUtc { get; set; }   // NEW
 
     public RideOffer RideOffer { get; set; } = default!;
 }
