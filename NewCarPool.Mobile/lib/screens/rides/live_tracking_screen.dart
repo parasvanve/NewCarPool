@@ -90,42 +90,96 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
     super.dispose();
   }
 
+  // Future<void> _connect() async {
+  //   final rideId = _rideOfferIdController.text.trim();
+  //   if (rideId.isEmpty) return;
+
+  //   await context.read<TrackingService>().connect(rideId, (payload) {
+  //     final lat = (payload['latitude'] as num?)?.toDouble();
+  //     final lng = (payload['longitude'] as num?)?.toDouble();
+  //     if (lat != null && lng != null && mounted) {
+  //       final next = LatLng(lat, lng);
+  //       setState(() {
+  //         driverLocation = next;
+  //         trailPoints.add(next);
+  //         if (trailPoints.length > 120) {
+  //           trailPoints.removeAt(0);
+  //         }
+  //       });
+  //       if (autoFollow) {
+  //         _mapController.future.then((controller) {
+  //           controller.animateCamera(
+  //             gmap.CameraUpdate.newLatLngZoom(
+  //               gmap.LatLng(next.latitude, next.longitude),
+  //               15,
+  //             ),
+  //           );
+  //         });
+  //       }
+  //     }
+  //   });
+
+  //   if (mounted) {
+  //     setState(() {
+  //       connected = true;
+  //       trailPoints
+  //         ..clear()
+  //         ..add(driverLocation);
+  //     });
+  //   }
+  // }
+
+  //new code
+  bool _connecting = false; // add this field to State
+
   Future<void> _connect() async {
     final rideId = _rideOfferIdController.text.trim();
-    if (rideId.isEmpty) return;
+    if (rideId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a Ride Offer ID first.')),
+      );
+      return;
+    }
 
-    await context.read<TrackingService>().connect(rideId, (payload) {
-      final lat = (payload['latitude'] as num?)?.toDouble();
-      final lng = (payload['longitude'] as num?)?.toDouble();
-      if (lat != null && lng != null && mounted) {
-        final next = LatLng(lat, lng);
-        setState(() {
-          driverLocation = next;
-          trailPoints.add(next);
-          if (trailPoints.length > 120) {
-            trailPoints.removeAt(0);
-          }
-        });
-        if (autoFollow) {
-          _mapController.future.then((controller) {
-            controller.animateCamera(
-              gmap.CameraUpdate.newLatLngZoom(
-                gmap.LatLng(next.latitude, next.longitude),
-                15,
-              ),
-            );
+    setState(() => _connecting = true);
+    try {
+      await context.read<TrackingService>().connect(rideId, (payload) {
+        final lat = (payload['latitude'] as num?)?.toDouble();
+        final lng = (payload['longitude'] as num?)?.toDouble();
+        if (lat != null && lng != null && mounted) {
+          final next = LatLng(lat, lng);
+          setState(() {
+            driverLocation = next;
+            trailPoints.add(next);
+            if (trailPoints.length > 120) trailPoints.removeAt(0);
           });
+          if (autoFollow) {
+            _mapController.future.then((controller) {
+              controller.animateCamera(
+                gmap.CameraUpdate.newLatLngZoom(
+                    gmap.LatLng(next.latitude, next.longitude), 15),
+              );
+            });
+          }
         }
-      }
-    });
-
-    if (mounted) {
-      setState(() {
-        connected = true;
-        trailPoints
-          ..clear()
-          ..add(driverLocation);
       });
+
+      if (mounted) {
+        setState(() {
+          connected = true;
+          trailPoints
+            ..clear()
+            ..add(driverLocation);
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not connect to tracking: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _connecting = false);
     }
   }
 
@@ -156,10 +210,19 @@ class _LiveTrackingScreenState extends State<LiveTrackingScreen> {
                   ),
                 ),
                 const SizedBox(width: 8),
+                // FilledButton(
+                //   onPressed: connected ? null : _connect,
+                //   style: FilledButton.styleFrom(backgroundColor: accent),
+                //   child: Text(connected ? 'Connected' : 'Connect'),
+                // ),
+
+                //new code
                 FilledButton(
-                  onPressed: connected ? null : _connect,
+                  onPressed: connected || _connecting ? null : _connect,
                   style: FilledButton.styleFrom(backgroundColor: accent),
-                  child: Text(connected ? 'Connected' : 'Connect'),
+                  child: Text(connected
+                      ? 'Connected'
+                      : (_connecting ? 'Connecting...' : 'Connect')),
                 ),
               ],
             ),
