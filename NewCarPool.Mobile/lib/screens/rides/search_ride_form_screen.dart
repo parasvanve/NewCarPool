@@ -15,8 +15,25 @@ import '../../providers/ride_provider.dart';
 import '../../services/map_service.dart';
 import 'ride_results_screen.dart';
 
+// class SearchRideFormScreen extends StatefulWidget {
+//   const SearchRideFormScreen({super.key});
+
+//   @override
+//   State<SearchRideFormScreen> createState() => _SearchRideFormScreenState();
+// }
+
+//new code
 class SearchRideFormScreen extends StatefulWidget {
-  const SearchRideFormScreen({super.key});
+  const SearchRideFormScreen({
+    super.key,
+    this.initialPickupLat,
+    this.initialPickupLng,
+    this.initialPickupLabel,
+  });
+
+  final double? initialPickupLat;
+  final double? initialPickupLng;
+  final String? initialPickupLabel;
 
   @override
   State<SearchRideFormScreen> createState() => _SearchRideFormScreenState();
@@ -69,9 +86,35 @@ class _SearchRideFormScreenState extends State<SearchRideFormScreen> {
   double _pendingMapZoom = 14;
   double _mapZoom = 13;
 
+  // @override
+  // void initState() {
+  //   super.initState();
+  // }
+
+  //new code
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.initialPickupLat != null && widget.initialPickupLng != null) {
+        _applyIncomingPickup();
+      } else {
+        _determineCurrentLocation(); // auto-fetch GPS on open
+      }
+    });
+  }
+
+  void _applyIncomingPickup() {
+    final point = LatLng(widget.initialPickupLat!, widget.initialPickupLng!);
+    setState(() {
+      _pickupLatLng = point;
+      _centerLocation = point;
+      _pickupController.text = widget.initialPickupLabel ?? 'Current location';
+      _activeField = _SearchMapPickField.destination;
+    });
+    _moveMapSafely(point, 14.5);
+    _loadRoutePreview();
   }
 
   @override

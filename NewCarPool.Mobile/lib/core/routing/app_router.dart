@@ -84,9 +84,21 @@ class AppRouter {
       GoRoute(
           path: AppRoutes.offerRide,
           pageBuilder: (_, __) => _fadeSlidePage(const OfferRideFormScreen())),
+      // GoRoute(
+      //     path: AppRoutes.searchRides,
+      //     pageBuilder: (_, __) => _fadeSlidePage(const SearchRideFormScreen())),
+
+      //new code
       GoRoute(
           path: AppRoutes.searchRides,
-          pageBuilder: (_, __) => _fadeSlidePage(const SearchRideFormScreen())),
+          pageBuilder: (_, state) {
+            final extra = state.extra as Map<String, dynamic>?;
+            return _fadeSlidePage(SearchRideFormScreen(
+              initialPickupLat: extra?['pickupLat'] as double?,
+              initialPickupLng: extra?['pickupLng'] as double?,
+              initialPickupLabel: extra?['pickupLabel'] as String?,
+            ));
+          }),
       GoRoute(
           path: AppRoutes.vehicles,
           pageBuilder: (_, __) => _fadeSlidePage(const MyVehiclesScreen())),

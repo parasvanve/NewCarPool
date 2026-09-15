@@ -1547,6 +1547,7 @@
 //   }
 // }
 
+//new code
 import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -2258,9 +2259,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                                                             14));
                                               },
                                     style: FilledButton.styleFrom(
-                                      backgroundColor: canStart
-                                          ? const Color(0xFF16A34A)
-                                          : const Color(0xFF4F46E5),
+                                      backgroundColor: const Color(0xFF4F46E5),
                                     ),
                                     icon: Icon(canStart
                                         ? Icons.play_circle_outline
@@ -2365,9 +2364,7 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
                                             _driverLivePoint ?? fallback, 14));
                                   },
                         style: FilledButton.styleFrom(
-                          backgroundColor: canStart
-                              ? const Color(0xFF16A34A)
-                              : const Color(0xFF4F46E5),
+                          backgroundColor: const Color(0xFF4F46E5),
                         ),
                         icon: Icon(canStart
                             ? Icons.play_circle_outline

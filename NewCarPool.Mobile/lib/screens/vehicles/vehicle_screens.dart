@@ -1,13 +1,410 @@
+// import 'package:dio/dio.dart';
+// import 'package:flutter/material.dart';
+// import 'package:provider/provider.dart';
+
+// import '../../core/errors/app_exception.dart';
+// import '../../core/widgets/app_design_system.dart';
+// import '../../core/widgets/app_snack_bar.dart';
+// import '../../core/widgets/loading_button.dart';
+// import '../../models/vehicle_models.dart';
+// import '../../providers/vehicle_provider.dart';
+
+// class MyVehiclesScreen extends StatefulWidget {
+//   const MyVehiclesScreen({super.key});
+
+//   @override
+//   State<MyVehiclesScreen> createState() => _MyVehiclesScreenState();
+// }
+
+// class _MyVehiclesScreenState extends State<MyVehiclesScreen> {
+//   @override
+//   void initState() {
+//     super.initState();
+//     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+//   }
+
+//   Future<void> _load() async {
+//     try {
+//       await context.read<VehicleProvider>().loadMine();
+//     } catch (_) {
+//       if (mounted) AppSnackBar.showError(context, 'Could not load vehicles.');
+//     }
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     final provider = context.watch<VehicleProvider>();
+//     return Scaffold(
+//       backgroundColor: AppDesignTokens.pageBackground(context),
+//       appBar: AppBar(title: const Text('My Vehicles')),
+//       floatingActionButton: FloatingActionButton.extended(
+//         onPressed: () => _openForm(context),
+//         icon: const Icon(Icons.add),
+//         label: const Text('Add Vehicle'),
+//       ),
+//       body: Align(
+//         alignment: Alignment.topCenter,
+//         child: ConstrainedBox(
+//           constraints: const BoxConstraints(maxWidth: 900),
+//           child: RefreshIndicator(
+//             onRefresh: _load,
+//             child: provider.isLoading && provider.vehicles.isEmpty
+//                 ? const Center(child: CircularProgressIndicator())
+//                 : provider.vehicles.isEmpty
+//                     ? ListView(
+//                         padding: const EdgeInsets.all(12),
+//                         children: [
+//                           const AppGradientHeroCard(
+//                             title: 'Vehicle Garage',
+//                             subtitle:
+//                                 'Add your vehicle to start offering rides',
+//                             icon: Icons.garage_outlined,
+//                           ),
+//                           const SizedBox(height: 120),
+//                           Icon(Icons.garage_outlined,
+//                               size: 54, color: Colors.grey.shade400),
+//                           const SizedBox(height: 8),
+//                           const Center(child: Text('No vehicles added yet.')),
+//                         ],
+//                       )
+//                     : ListView.builder(
+//                         padding: const EdgeInsets.fromLTRB(12, 12, 12, 96),
+//                         itemCount: provider.vehicles.length,
+//                         itemBuilder: (context, index) {
+//                           final v = provider.vehicles[index];
+//                           return _VehicleCard(
+//                             vehicle: v,
+//                             onEdit: () => _openForm(context, vehicle: v),
+//                             onDelete: () => _confirmDelete(context, v),
+//                           );
+//                         },
+//                       ),
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+
+//   Future<void> _openForm(BuildContext context, {Vehicle? vehicle}) async {
+//     await Navigator.of(context).push(
+//         MaterialPageRoute(builder: (_) => VehicleFormScreen(vehicle: vehicle)));
+//   }
+
+//   Future<void> _confirmDelete(BuildContext context, Vehicle vehicle) async {
+//     final confirmed = await showDialog<bool>(
+//       context: context,
+//       builder: (_) => AlertDialog(
+//         title: const Text('Delete vehicle?'),
+//         content:
+//             Text('${vehicle.vehicleName} will be removed from your garage.'),
+//         actions: [
+//           TextButton(
+//               onPressed: () => Navigator.pop(context, false),
+//               child: const Text('Cancel')),
+//           FilledButton(
+//               onPressed: () => Navigator.pop(context, true),
+//               child: const Text('Delete')),
+//         ],
+//       ),
+//     );
+
+//     if (confirmed != true || !context.mounted) return;
+//     try {
+//       await context.read<VehicleProvider>().delete(vehicle.id);
+//       if (context.mounted) AppSnackBar.showSuccess(context, 'Vehicle deleted.');
+//     } catch (_) {
+//       if (context.mounted)
+//         AppSnackBar.showError(context, 'Could not delete vehicle.');
+//     }
+//   }
+// }
+
+// class _VehicleCard extends StatelessWidget {
+//   const _VehicleCard({
+//     required this.vehicle,
+//     required this.onEdit,
+//     required this.onDelete,
+//   });
+
+//   final Vehicle vehicle;
+//   final VoidCallback onEdit;
+//   final VoidCallback onDelete;
+
+//   @override
+//   Widget build(BuildContext context) {
+//     final icon = vehicle.vehicleType == VehicleType.bike
+//         ? Icons.two_wheeler
+//         : Icons.directions_car;
+//     return Card(
+//       margin: const EdgeInsets.only(bottom: 10),
+//       child: ListTile(
+//         leading: Container(
+//           width: 42,
+//           height: 42,
+//           decoration: BoxDecoration(
+//             color: const Color(0xFFEFF1FF),
+//             borderRadius: BorderRadius.circular(12),
+//           ),
+//           child: Icon(icon, color: AppDesignTokens.brandStart),
+//         ),
+//         title: Text(vehicle.vehicleName,
+//             style: const TextStyle(fontWeight: FontWeight.w700)),
+//         subtitle: Text(
+//             '${vehicle.vehicleNumber} • ${vehicle.color} • ${vehicle.seats} seats'),
+//         trailing: PopupMenuButton<String>(
+//           onSelected: (value) => value == 'edit' ? onEdit() : onDelete(),
+//           itemBuilder: (_) => const [
+//             PopupMenuItem(value: 'edit', child: Text('Edit')),
+//             PopupMenuItem(value: 'delete', child: Text('Delete')),
+//           ],
+//         ),
+//       ),
+//     );
+//   }
+// }
+
+// class VehicleFormScreen extends StatefulWidget {
+//   const VehicleFormScreen({super.key, this.vehicle});
+
+//   final Vehicle? vehicle;
+
+//   @override
+//   State<VehicleFormScreen> createState() => _VehicleFormScreenState();
+// }
+
+// class _VehicleFormScreenState extends State<VehicleFormScreen> {
+//   final _formKey = GlobalKey<FormState>();
+//   late final TextEditingController _name;
+//   late final TextEditingController _number;
+//   late final TextEditingController _color;
+//   late final TextEditingController _rcImage;
+//   late final TextEditingController _vehicleImage;
+//   late VehicleType _type;
+//   late int _seats;
+//   bool _isSaving = false;
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     final v = widget.vehicle;
+//     _name = TextEditingController(text: v?.vehicleName ?? '');
+//     _number = TextEditingController(text: v?.vehicleNumber ?? '');
+//     _color = TextEditingController(text: v?.color ?? '');
+//     _rcImage = TextEditingController(text: v?.rcImagePath ?? '');
+//     _vehicleImage = TextEditingController(text: v?.vehicleImagePath ?? '');
+//     _type = v?.vehicleType ?? VehicleType.sedan;
+//     _seats = v?.seats ?? 4;
+//   }
+
+//   @override
+//   void dispose() {
+//     _name.dispose();
+//     _number.dispose();
+//     _color.dispose();
+//     _rcImage.dispose();
+//     _vehicleImage.dispose();
+//     super.dispose();
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     final isEdit = widget.vehicle != null;
+//     return Scaffold(
+//       backgroundColor: AppDesignTokens.pageBackground(context),
+//       appBar: AppBar(title: Text(isEdit ? 'Edit Vehicle' : 'Add Vehicle')),
+//       body: Align(
+//         alignment: Alignment.topCenter,
+//         child: ConstrainedBox(
+//           constraints: const BoxConstraints(maxWidth: 720),
+//           child: Form(
+//             key: _formKey,
+//             child: ListView(
+//               padding: const EdgeInsets.all(16),
+//               children: [
+//                 TextFormField(
+//                   controller: _name,
+//                   decoration: const InputDecoration(
+//                       labelText: 'Vehicle Name',
+//                       prefixIcon: Icon(Icons.directions_car)),
+//                   validator: (v) => _required(v, 'Vehicle name'),
+//                 ),
+//                 const SizedBox(height: 12),
+//                 TextFormField(
+//                   controller: _number,
+//                   decoration: const InputDecoration(
+//                       labelText: 'Vehicle Number',
+//                       prefixIcon: Icon(Icons.confirmation_number_outlined)),
+//                   validator: _validateVehicleNumber,
+//                 ),
+//                 const SizedBox(height: 12),
+//                 DropdownButtonFormField<VehicleType>(
+//                   initialValue: _type,
+//                   decoration: const InputDecoration(
+//                       labelText: 'Vehicle Type',
+//                       prefixIcon: Icon(Icons.category_outlined)),
+//                   items: VehicleType.values
+//                       .map((t) =>
+//                           DropdownMenuItem(value: t, child: Text(t.label)))
+//                       .toList(),
+//                   onChanged: (v) =>
+//                       setState(() => _type = v ?? VehicleType.sedan),
+//                   validator: (v) =>
+//                       v == null ? 'Vehicle type is required' : null,
+//                 ),
+//                 const SizedBox(height: 12),
+//                 TextFormField(
+//                   controller: _color,
+//                   decoration: const InputDecoration(
+//                       labelText: 'Color',
+//                       prefixIcon: Icon(Icons.palette_outlined)),
+//                   validator: (v) => _required(v, 'Color'),
+//                 ),
+//                 const SizedBox(height: 12),
+//                 Row(
+//                   children: [
+//                     const Icon(Icons.event_seat),
+//                     const SizedBox(width: 8),
+//                     Text('Seats: $_seats'),
+//                     const Spacer(),
+//                     IconButton(
+//                         onPressed:
+//                             _seats > 4 ? () => setState(() => _seats--) : null,
+//                         icon: const Icon(Icons.remove_circle_outline)),
+//                     IconButton(
+//                         onPressed:
+//                             _seats < 8 ? () => setState(() => _seats++) : null,
+//                         icon: const Icon(Icons.add_circle_outline)),
+//                   ],
+//                 ),
+//                 const SizedBox(height: 12),
+//                 TextFormField(
+//                   controller: _rcImage,
+//                   decoration: const InputDecoration(
+//                       labelText: 'RC Image URL/Path',
+//                       prefixIcon: Icon(Icons.image_outlined)),
+//                 ),
+//                 const SizedBox(height: 12),
+//                 TextFormField(
+//                   controller: _vehicleImage,
+//                   decoration: const InputDecoration(
+//                       labelText: 'Vehicle Image URL/Path',
+//                       prefixIcon: Icon(Icons.photo_camera_outlined)),
+//                 ),
+//                 const SizedBox(height: 18),
+//                 LoadingButton(
+//                   isLoading: _isSaving,
+//                   label: isEdit ? 'Update Vehicle' : 'Save Vehicle',
+//                   icon: Icons.save_outlined,
+//                   onPressed: _save,
+//                 ),
+//               ],
+//             ),
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+
+//   Future<void> _save() async {
+//     if (!_formKey.currentState!.validate()) return;
+//     if (_seats < 4 || _seats > 8) {
+//       AppSnackBar.showError(
+//         context,
+//         'Vehicle seating capacity must be between 4 and 8.',
+//       );
+//       return;
+//     }
+//     setState(() => _isSaving = true);
+//     final input = UpsertVehicleInput(
+//       vehicleName: _name.text.trim(),
+//       vehicleNumber: _number.text.trim().toUpperCase(),
+//       vehicleType: _type,
+//       color: _color.text.trim(),
+//       seats: _seats,
+//       rcImagePath: _rcImage.text.trim().isEmpty ? null : _rcImage.text.trim(),
+//       vehicleImagePath:
+//           _vehicleImage.text.trim().isEmpty ? null : _vehicleImage.text.trim(),
+//     );
+//     try {
+//       final provider = context.read<VehicleProvider>();
+//       if (widget.vehicle == null) {
+//         await provider.add(input);
+//       } else {
+//         await provider.update(widget.vehicle!.id, input);
+//       }
+//       if (mounted) {
+//         AppSnackBar.showSuccess(context,
+//             widget.vehicle == null ? 'Vehicle added.' : 'Vehicle updated.');
+//         Navigator.pop(context);
+//       }
+//     } on DioException catch (e) {
+//       final error = e.error;
+//       if (mounted) {
+//         AppSnackBar.showError(context,
+//             error is AppException ? error.message : 'Could not save vehicle.');
+//       }
+//     } finally {
+//       if (mounted) setState(() => _isSaving = false);
+//     }
+//   }
+
+//   String? _required(String? value, String field) {
+//     if (value == null || value.trim().isEmpty) return '$field is required';
+//     return null;
+//   }
+
+//   String? _validateVehicleNumber(String? value) {
+//     final requiredError = _required(value, 'Vehicle number');
+//     if (requiredError != null) return requiredError;
+
+//     final normalized = value!.toUpperCase().replaceAll(RegExp(r'[\s-]'), '');
+//     final isValid =
+//         RegExp(r'^[A-Z]{2}[0-9]{1,2}[A-Z]{1,3}[0-9]{4}$').hasMatch(normalized);
+//     return isValid ? null : 'Enter a valid vehicle number';
+//   }
+// }
+
+//new code
+
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/config/app_config.dart';
 import '../../core/errors/app_exception.dart';
 import '../../core/widgets/app_design_system.dart';
 import '../../core/widgets/app_snack_bar.dart';
 import '../../core/widgets/loading_button.dart';
 import '../../models/vehicle_models.dart';
 import '../../providers/vehicle_provider.dart';
+import '../../services/vehicle_service.dart' show VehicleImageFile;
+
+const _maxImageBytes =
+    5 * 1000 * 1000; // must match VehiclesController.MaxImageBytes
+const _allowedImageExtensions = ['.jpg', '.jpeg', '.png', '.webp'];
+
+String _vehicleImageContentType(String fileName) {
+  final lower = fileName.toLowerCase();
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return 'application/octet-stream';
+}
+
+String _absoluteImageUrl(String? path) {
+  if (path == null || path.isEmpty) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  final base = AppConfig.apiBaseUrl.endsWith('/')
+      ? AppConfig.apiBaseUrl.substring(0, AppConfig.apiBaseUrl.length - 1)
+      : AppConfig.apiBaseUrl;
+  return '$base${path.startsWith('/') ? path : '/$path'}';
+}
 
 class MyVehiclesScreen extends StatefulWidget {
   const MyVehiclesScreen({super.key});
@@ -174,14 +571,24 @@ class VehicleFormScreen extends StatefulWidget {
 
 class _VehicleFormScreenState extends State<VehicleFormScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _imagePicker = ImagePicker();
   late final TextEditingController _name;
   late final TextEditingController _number;
   late final TextEditingController _color;
-  late final TextEditingController _rcImage;
-  late final TextEditingController _vehicleImage;
   late VehicleType _type;
   late int _seats;
   bool _isSaving = false;
+
+  // Currently-picked (not yet uploaded) images.
+  VehicleImageFile? _pickedRcImage;
+  VehicleImageFile? _pickedVehicleImage;
+
+  // Paths already stored on the server (populated after save/upload, or when editing).
+  String? _rcImagePath;
+  String? _vehicleImagePath;
+
+  bool _isUploadingRc = false;
+  bool _isUploadingVehicle = false;
 
   @override
   void initState() {
@@ -190,10 +597,10 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
     _name = TextEditingController(text: v?.vehicleName ?? '');
     _number = TextEditingController(text: v?.vehicleNumber ?? '');
     _color = TextEditingController(text: v?.color ?? '');
-    _rcImage = TextEditingController(text: v?.rcImagePath ?? '');
-    _vehicleImage = TextEditingController(text: v?.vehicleImagePath ?? '');
     _type = v?.vehicleType ?? VehicleType.sedan;
     _seats = v?.seats ?? 4;
+    _rcImagePath = v?.rcImagePath;
+    _vehicleImagePath = v?.vehicleImagePath;
   }
 
   @override
@@ -201,9 +608,193 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
     _name.dispose();
     _number.dispose();
     _color.dispose();
-    _rcImage.dispose();
-    _vehicleImage.dispose();
     super.dispose();
+  }
+
+  bool get _isEdit => widget.vehicle != null;
+
+  Future<void> _pickImage({required bool isRc}) async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Take photo'),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from gallery'),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (source == null) return;
+
+    if (source == ImageSource.camera && !kIsWeb) {
+      final status = await Permission.camera.request();
+      if (!status.isGranted) {
+        if (mounted)
+          AppSnackBar.showError(context, 'Camera permission is required.');
+        return;
+      }
+    }
+
+    final picked =
+        await _imagePicker.pickImage(source: source, imageQuality: 88);
+    if (picked == null) return;
+
+    final extension = picked.name.contains('.')
+        ? picked.name.substring(picked.name.lastIndexOf('.')).toLowerCase()
+        : '';
+    if (!_allowedImageExtensions.contains(extension)) {
+      if (mounted) {
+        AppSnackBar.showError(
+            context, 'Only JPG, PNG or WEBP images are allowed.');
+      }
+      return;
+    }
+
+    final bytes = kIsWeb ? await picked.readAsBytes() : null;
+    final sizeBytes = bytes?.lengthInBytes ?? await picked.length();
+    if (sizeBytes > _maxImageBytes) {
+      if (mounted)
+        AppSnackBar.showError(context, 'Image must be smaller than 5 MB.');
+      return;
+    }
+
+    final file = VehicleImageFile(
+      fileName: picked.name,
+      contentType: picked.mimeType ?? _vehicleImageContentType(picked.name),
+      path: kIsWeb ? null : picked.path,
+      bytes: bytes,
+    );
+
+    setState(() {
+      if (isRc) {
+        _pickedRcImage = file;
+      } else {
+        _pickedVehicleImage = file;
+      }
+    });
+
+    // If the vehicle already exists (editing), upload immediately.
+    // For a brand-new vehicle we upload right after it's created in _save().
+    if (_isEdit) {
+      await _uploadImage(isRc: isRc, vehicleId: widget.vehicle!.id);
+    }
+  }
+
+  Future<void> _uploadImage(
+      {required bool isRc, required String vehicleId}) async {
+    final file = isRc ? _pickedRcImage : _pickedVehicleImage;
+    if (file == null) return;
+
+    setState(() {
+      if (isRc) {
+        _isUploadingRc = true;
+      } else {
+        _isUploadingVehicle = true;
+      }
+    });
+
+    try {
+      final provider = context.read<VehicleProvider>();
+      final vehicle = isRc
+          ? await provider.uploadRcImage(vehicleId, file)
+          : await provider.uploadVehicleImage(vehicleId, file);
+      if (!mounted) return;
+      setState(() {
+        if (isRc) {
+          _rcImagePath = vehicle.rcImagePath;
+          _pickedRcImage = null;
+        } else {
+          _vehicleImagePath = vehicle.vehicleImagePath;
+          _pickedVehicleImage = null;
+        }
+      });
+    } on DioException catch (e) {
+      final error = e.error;
+      if (mounted) {
+        AppSnackBar.showError(
+          context,
+          error is AppException ? error.message : 'Could not upload image.',
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUploadingRc = false;
+          _isUploadingVehicle = false;
+        });
+      }
+    }
+  }
+
+  Widget _imagePickerTile({
+    required String label,
+    required bool isRc,
+  }) {
+    final picked = isRc ? _pickedRcImage : _pickedVehicleImage;
+    final savedPath = isRc ? _rcImagePath : _vehicleImagePath;
+    final isUploading = isRc ? _isUploadingRc : _isUploadingVehicle;
+
+    Widget preview;
+    if (picked?.bytes != null) {
+      preview = Image.memory(picked!.bytes!, fit: BoxFit.cover);
+    } else if (picked?.path != null) {
+      preview = Image.file(File(picked!.path!), fit: BoxFit.cover);
+    } else if (savedPath != null && savedPath.isNotEmpty) {
+      preview = Image.network(_absoluteImageUrl(savedPath),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) =>
+              const Icon(Icons.broken_image_outlined));
+    } else {
+      preview = Icon(Icons.add_a_photo_outlined, color: Colors.grey.shade500);
+    }
+
+    return InkWell(
+      onTap: isUploading ? null : () => _pickImage(isRc: isRc),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 130,
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F5FA),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            ClipRRect(borderRadius: BorderRadius.circular(12), child: preview),
+            if (isUploading)
+              const ColoredBox(
+                color: Colors.black38,
+                child: Center(
+                    child: CircularProgressIndicator(color: Colors.white)),
+              ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                color: Colors.black54,
+                child: Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -276,19 +867,26 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
                         icon: const Icon(Icons.add_circle_outline)),
                   ],
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _rcImage,
-                  decoration: const InputDecoration(
-                      labelText: 'RC Image URL/Path',
-                      prefixIcon: Icon(Icons.image_outlined)),
+                const SizedBox(height: 16),
+                const Text('Verification documents',
+                    style: TextStyle(fontWeight: FontWeight.w700)),
+                const SizedBox(height: 4),
+                Text(
+                  'Upload a clear photo of the RC (registration certificate) and a photo of the vehicle. Our team verifies these before you can offer rides.',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                 ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _vehicleImage,
-                  decoration: const InputDecoration(
-                      labelText: 'Vehicle Image URL/Path',
-                      prefixIcon: Icon(Icons.photo_camera_outlined)),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _imagePickerTile(label: 'RC Image', isRc: true),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child:
+                          _imagePickerTile(label: 'Vehicle Photo', isRc: false),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 18),
                 LoadingButton(
@@ -314,6 +912,22 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
       );
       return;
     }
+
+    // A new vehicle must have both documents attached before it can be
+    // submitted for verification. When editing, existing images already
+    // saved on the server (or images the user just picked) are enough.
+    if (!_isEdit) {
+      final hasRc = _pickedRcImage != null;
+      final hasVehiclePhoto = _pickedVehicleImage != null;
+      if (!hasRc || !hasVehiclePhoto) {
+        AppSnackBar.showError(
+          context,
+          'Please upload both the RC image and a vehicle photo.',
+        );
+        return;
+      }
+    }
+
     setState(() => _isSaving = true);
     final input = UpsertVehicleInput(
       vehicleName: _name.text.trim(),
@@ -321,20 +935,26 @@ class _VehicleFormScreenState extends State<VehicleFormScreen> {
       vehicleType: _type,
       color: _color.text.trim(),
       seats: _seats,
-      rcImagePath: _rcImage.text.trim().isEmpty ? null : _rcImage.text.trim(),
-      vehicleImagePath:
-          _vehicleImage.text.trim().isEmpty ? null : _vehicleImage.text.trim(),
+      rcImagePath: _rcImagePath,
+      vehicleImagePath: _vehicleImagePath,
     );
     try {
       final provider = context.read<VehicleProvider>();
-      if (widget.vehicle == null) {
-        await provider.add(input);
+      if (!_isEdit) {
+        final created = await provider.add(input);
+        // Vehicle now exists on the server — attach the picked images to it.
+        await _uploadImage(isRc: true, vehicleId: created.id);
+        await _uploadImage(isRc: false, vehicleId: created.id);
       } else {
         await provider.update(widget.vehicle!.id, input);
       }
       if (mounted) {
-        AppSnackBar.showSuccess(context,
-            widget.vehicle == null ? 'Vehicle added.' : 'Vehicle updated.');
+        AppSnackBar.showSuccess(
+          context,
+          _isEdit
+              ? 'Vehicle updated.'
+              : 'Vehicle added and submitted for verification.',
+        );
         Navigator.pop(context);
       }
     } on DioException catch (e) {
