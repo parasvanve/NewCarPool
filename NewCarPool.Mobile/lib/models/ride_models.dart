@@ -36,6 +36,7 @@ class RideOffer {
     required this.id,
     required this.driverId,
     required this.driverName,
+    this.driverPhoneNumber, // ADD THIS LINE
     required this.origin,
     required this.destination,
     this.intermediateStops = const [],
@@ -56,6 +57,8 @@ class RideOffer {
   final String id;
   final String driverId;
   final String driverName;
+  final String? driverPhoneNumber; // ADD THIS LINE
+
   final GeoPoint origin;
   final GeoPoint destination;
   final List<RideStop> intermediateStops;
@@ -76,6 +79,9 @@ class RideOffer {
         id: json['id'],
         driverId: json['driverId']?.toString() ?? '',
         driverName: json['driverName'] ?? '',
+        driverPhoneNumber:
+            json['driverPhoneNumber']?.toString(), // ADD THIS LINE
+
         origin: GeoPoint.fromJson(json['origin']),
         destination: GeoPoint.fromJson(json['destination']),
         intermediateStops: ((json['intermediateStops'] ?? json['dropPoints'])

@@ -627,7 +627,7 @@ class _BookingFlowScreenState extends State<BookingFlowScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                        'Driver: ${ride.driverName.isEmpty ? 'Driver' : ride.driverName}'),
+                        'Rider: ${ride.driverName.isEmpty ? 'Rider' : ride.driverName}'),
                     const SizedBox(height: 2),
                     Text('Available seats: ${ride.availableSeats}'),
                     const SizedBox(height: 2),

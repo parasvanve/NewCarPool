@@ -33,6 +33,7 @@ class RideBooking {
     required this.seatsBooked,
     required this.status,
     required this.createdAtUtc,
+    this.passengerPhoneNumber,
     this.passengerPickup,
     this.passengerDrop,
     this.cancelledAtUtc,
@@ -43,6 +44,8 @@ class RideBooking {
   final String rideOfferId;
   final String passengerId;
   final String passengerName;
+  final String? passengerPhoneNumber; // ADD as field
+
   final int seatsBooked;
   final int status;
   final DateTime createdAtUtc;
@@ -57,6 +60,8 @@ class RideBooking {
         rideOfferId: json['rideOfferId']?.toString() ?? '',
         passengerId: json['passengerId']?.toString() ?? '',
         passengerName: json['passengerName']?.toString() ?? '',
+        passengerPhoneNumber:
+            json['passengerPhoneNumber']?.toString(), // ADD to fromJson
         seatsBooked: (json['seatsBooked'] as num?)?.toInt() ?? 0,
         status: (json['status'] as num?)?.toInt() ?? 0,
         createdAtUtc: DepartureTimeUtils.tryParseUtcFromBackend(

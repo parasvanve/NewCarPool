@@ -1572,6 +1572,9 @@ import 'ride_chat_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/errors/app_exception.dart';
 
+import 'package:url_launcher/url_launcher.dart';
+import '../../providers/ride_provider.dart';
+
 class RideDetailsScreen extends StatefulWidget {
   const RideDetailsScreen({super.key, this.extra});
   final Object? extra;
@@ -2389,14 +2392,14 @@ class _RideDetailsScreenState extends State<RideDetailsScreen> {
     return {
       if (_driverLivePoint != null)
         gmap.Marker(
-          markerId: const gmap.MarkerId('driver-live'),
+          markerId: const gmap.MarkerId('Rider-live'),
           position: _driverLivePoint!,
           icon: _driverMarkerIcon ??
               gmap.BitmapDescriptor.defaultMarkerWithHue(
                 gmap.BitmapDescriptor.hueAzure,
               ),
           infoWindow: const gmap.InfoWindow(
-            title: 'Driver',
+            title: 'Rider',
             snippet: 'Live location',
           ),
         ),
@@ -2929,7 +2932,7 @@ class _RightPanel extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(ride.driverName.isEmpty ? 'Driver' : ride.driverName,
+                    Text(ride.driverName.isEmpty ? 'Rider' : ride.driverName,
                         style: const TextStyle(
                             fontWeight: FontWeight.w700, fontSize: 24)),
                     const SizedBox(height: 4),

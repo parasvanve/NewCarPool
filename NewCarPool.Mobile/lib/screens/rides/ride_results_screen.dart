@@ -213,7 +213,7 @@ class _RideCard extends StatelessWidget {
                     radius: 22,
                     backgroundColor: const Color(0xFFDCFCE7),
                     child: Text(
-                        (ride.driverName.isEmpty ? 'D' : ride.driverName[0])
+                        (ride.driverName.isEmpty ? 'R' : ride.driverName[0])
                             .toUpperCase(),
                         style: const TextStyle(
                             fontWeight: FontWeight.w700,

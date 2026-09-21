@@ -18,6 +18,8 @@ import '../../services/ride_service.dart';
 import '../rides/ride_chat_screen.dart';
 import '../rides/ride_details_screen.dart';
 
+import 'package:url_launcher/url_launcher.dart';
+
 class TripsScreen extends StatefulWidget {
   const TripsScreen({super.key, this.showAppBar = true});
 
@@ -731,7 +733,7 @@ class _BookedTab extends StatelessWidget {
             ride: ride,
             statusBadge: ride.status == 3 ? 'Ride Started' : 'Booked',
             primaryLabel: 'View Details',
-            secondaryLabel: 'Chat with Driver',
+            secondaryLabel: 'Chat with Rider',
             tertiaryLabel: 'Cancel Booking',
             bookedSeats: booking.seatsBooked,
             yourPickupName: booking.passengerPickup?.name,
@@ -1030,6 +1032,14 @@ class _PassengerCard extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
+              if (booking.passengerPhoneNumber != null &&
+                  booking.passengerPhoneNumber!.isNotEmpty)
+                IconButton(
+                  icon: const Icon(Icons.call_outlined,
+                      size: 18, color: Color(0xFF4F46E5)),
+                  onPressed: () => launchUrl(
+                      Uri(scheme: 'tel', path: booking.passengerPhoneNumber)),
+                ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -1117,7 +1127,7 @@ class _CancelledBookingCard extends StatelessWidget {
     final routeTitle = ride == null
         ? 'Cancelled Booking'
         : LocationDisplayFormatter.routeTitle(ride!.origin, ride!.destination);
-    final cancelledBy = ride?.status == 5 ? 'Driver' : 'You';
+    final cancelledBy = ride?.status == 5 ? 'Rider' : 'You';
     final cancelledAt = booking.cancelledAtUtc;
     final reason = booking.cancellationReason?.trim();
 
@@ -1168,9 +1178,7 @@ class _CancelledBookingCard extends StatelessWidget {
                   const SizedBox(width: 6),
                   Expanded(
                       child: Text(
-                          ride!.driverName.isEmpty
-                              ? 'Driver'
-                              : ride!.driverName,
+                          ride!.driverName.isEmpty ? 'Rider' : ride!.driverName,
                           overflow: TextOverflow.ellipsis)),
                 ],
               ),

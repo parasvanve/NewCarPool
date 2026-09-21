@@ -1,12 +1,16 @@
-﻿// import 'package:flutter/material.dart';
+﻿// //new code
+// import 'package:flutter/material.dart';
 // import 'package:go_router/go_router.dart';
 // import 'package:provider/provider.dart';
+// import 'package:url_launcher/url_launcher.dart';
+// import '../../core/constants/app_constants.dart';
 
 // //new code
 
 // import '../../core/constants/app_routes.dart';
 // import '../../core/utils/departure_time_utils.dart';
 // import '../../core/utils/location_display_formatter.dart';
+// import '../../core/utils/location_permission_helper.dart';
 // import '../../core/widgets/app_design_system.dart';
 // import '../../core/widgets/ride_timeline_widgets.dart';
 // import '../../models/booking_models.dart';
@@ -16,6 +20,7 @@
 // import '../../providers/notification_provider.dart';
 // import '../../providers/profile_provider.dart';
 // import '../../providers/ride_provider.dart';
+// import '../../services/map_service.dart';
 // import '../../services/notification_service.dart';
 // import '../notifications/notification_screen.dart';
 // import '../profile/profile_screen.dart';
@@ -213,27 +218,62 @@
 //                   ),
 //                 ),
 //               ),
+//           // const Spacer(),
+//           // Container(
+//           //   padding: const EdgeInsets.all(12),
+//           //   decoration: BoxDecoration(
+//           //     color: AppDesignTokens.surfaceMuted(context),
+//           //     borderRadius: BorderRadius.circular(14),
+//           //     border: Border.all(color: AppDesignTokens.borderColor(context)),
+//           //   ),
+//           //   child: Column(
+//           //     crossAxisAlignment: CrossAxisAlignment.start,
+//           //     children: [
+//           //       Text('Need Help?',
+//           //           style: TextStyle(
+//           //               fontWeight: FontWeight.w700,
+//           //               color: AppDesignTokens.textPrimary(context))),
+//           //       const SizedBox(height: 4),
+//           //       Text('Contact support 24/7 for booking and trip help.',
+//           //           style: TextStyle(
+//           //               fontSize: 12,
+//           //               color: AppDesignTokens.textSecondary(context))),
+//           //     ],
+//           //   ),
+//           // ),
 //           const Spacer(),
-//           Container(
-//             padding: const EdgeInsets.all(12),
-//             decoration: BoxDecoration(
-//               color: AppDesignTokens.surfaceMuted(context),
-//               borderRadius: BorderRadius.circular(14),
-//               border: Border.all(color: AppDesignTokens.borderColor(context)),
-//             ),
-//             child: Column(
-//               crossAxisAlignment: CrossAxisAlignment.start,
-//               children: [
-//                 Text('Need Help?',
-//                     style: TextStyle(
-//                         fontWeight: FontWeight.w700,
-//                         color: AppDesignTokens.textPrimary(context))),
-//                 const SizedBox(height: 4),
-//                 Text('Contact support 24/7 for booking and trip help.',
-//                     style: TextStyle(
-//                         fontSize: 12,
-//                         color: AppDesignTokens.textSecondary(context))),
-//               ],
+//           InkWell(
+//             borderRadius: BorderRadius.circular(14),
+//             onTap: () => launchUrl(
+//                 Uri(scheme: 'tel', path: AppConstants.tollFreeSupportNumber)),
+//             child: Container(
+//               padding: const EdgeInsets.all(12),
+//               decoration: BoxDecoration(
+//                 color: AppDesignTokens.surfaceMuted(context),
+//                 borderRadius: BorderRadius.circular(14),
+//                 border: Border.all(color: AppDesignTokens.borderColor(context)),
+//               ),
+//               child: Row(
+//                 children: [
+//                   Expanded(
+//                     child: Column(
+//                       crossAxisAlignment: CrossAxisAlignment.start,
+//                       children: [
+//                         Text('Need Help?',
+//                             style: TextStyle(
+//                                 fontWeight: FontWeight.w700,
+//                                 color: AppDesignTokens.textPrimary(context))),
+//                         const SizedBox(height: 4),
+//                         Text('Contact support 24/7 for booking and trip help.',
+//                             style: TextStyle(
+//                                 fontSize: 12,
+//                                 color: AppDesignTokens.textSecondary(context))),
+//                       ],
+//                     ),
+//                   ),
+//                   const Icon(Icons.call, size: 18, color: Color(0xFF4F46E5)),
+//                 ],
+//               ),
 //             ),
 //           ),
 //         ],
@@ -242,9 +282,48 @@
 //   }
 // }
 
-// class _HomePage extends StatelessWidget {
+// class _HomePage extends StatefulWidget {
 //   const _HomePage({required this.onProfileTap});
 //   final VoidCallback onProfileTap;
+
+//   @override
+//   State<_HomePage> createState() => _HomePageState();
+// }
+
+// class _HomePageState extends State<_HomePage> {
+//   LocationPoint? _liveLocation;
+//   String? _liveAddress;
+//   bool _loadingLocation = false;
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     WidgetsBinding.instance.addPostFrameCallback((_) => _refreshLiveLocation());
+//   }
+
+//   Future<void> _refreshLiveLocation() async {
+//     if (!mounted) return;
+//     setState(() => _loadingLocation = true);
+//     try {
+//       final point = await LocationPermissionHelper.currentOrFallback(
+//         deniedMessage: LocationPermissionHelper.showCurrentLocationMessage,
+//       );
+//       String? address;
+//       try {
+//         address = await context.read<MapService>().reverseGeocode(
+//               latitude: point.latitude,
+//               longitude: point.longitude,
+//             );
+//       } catch (_) {}
+//       if (!mounted) return;
+//       setState(() {
+//         _liveLocation = point;
+//         _liveAddress = address;
+//       });
+//     } finally {
+//       if (mounted) setState(() => _loadingLocation = false);
+//     }
+//   }
 
 //   @override
 //   Widget build(BuildContext context) {
@@ -278,9 +357,10 @@
 //     };
 
 //     final firstRide = rides.isEmpty ? null : rides.first;
-//     final pickupText = firstRide == null
-//         ? 'Pickup Location'
-//         : LocationDisplayFormatter.title(firstRide.origin);
+
+//     final pickupText = firstRide != null
+//         ? LocationDisplayFormatter.title(firstRide.origin)
+//         : (_liveAddress ?? 'Pickup Location');
 
 //     final destinationText = firstRide == null
 //         ? 'Destination'
@@ -289,12 +369,37 @@
 //     final leftContent = Column(
 //       crossAxisAlignment: CrossAxisAlignment.stretch,
 //       children: [
-//         _TopHomeBar(unreadCount: unreadCount, onProfileTap: onProfileTap),
+//         _TopHomeBar(
+//             unreadCount: unreadCount, onProfileTap: widget.onProfileTap),
 //         const SizedBox(height: 12),
 //         _GreetingCard(firstName: firstName),
 //         const SizedBox(height: 12),
 //         _PickupDestinationCard(
-//             pickupText: pickupText, destinationText: destinationText),
+//           pickupText: pickupText,
+//           destinationText: destinationText,
+//           isLoadingPickup: _loadingLocation,
+//           onPickupTap: () => context.push(
+//             AppRoutes.searchRides,
+//             extra: _liveLocation == null
+//                 ? null
+//                 : {
+//                     'pickupLat': _liveLocation!.latitude,
+//                     'pickupLng': _liveLocation!.longitude,
+//                     'pickupLabel': _liveAddress,
+//                   },
+//           ),
+//           onPickupLocate: _refreshLiveLocation,
+//           onDestinationTap: () => context.push(
+//             AppRoutes.searchRides,
+//             extra: _liveLocation == null
+//                 ? null
+//                 : {
+//                     'pickupLat': _liveLocation!.latitude,
+//                     'pickupLng': _liveLocation!.longitude,
+//                     'pickupLabel': _liveAddress,
+//                   },
+//           ),
+//         ),
 //         const SizedBox(height: 12),
 //         Row(
 //           children: [
@@ -495,11 +600,21 @@
 // }
 
 // class _PickupDestinationCard extends StatelessWidget {
-//   const _PickupDestinationCard(
-//       {required this.pickupText, required this.destinationText});
+//   const _PickupDestinationCard({
+//     required this.pickupText,
+//     required this.destinationText,
+//     this.isLoadingPickup = false,
+//     this.onPickupTap,
+//     this.onPickupLocate,
+//     this.onDestinationTap,
+//   });
 
 //   final String pickupText;
 //   final String destinationText;
+//   final bool isLoadingPickup;
+//   final VoidCallback? onPickupTap;
+//   final VoidCallback? onPickupLocate;
+//   final VoidCallback? onDestinationTap;
 
 //   @override
 //   Widget build(BuildContext context) {
@@ -509,17 +624,43 @@
 //         padding: const EdgeInsets.all(14),
 //         child: Column(
 //           children: [
-//             _LocationRow(
+//             InkWell(
+//               onTap: onPickupTap,
+//               borderRadius: BorderRadius.circular(12),
+//               child: _LocationRow(
 //                 icon: Icons.trip_origin,
 //                 iconColor: const Color(0xFF16A34A),
 //                 label: 'Pickup location',
-//                 value: pickupText),
+//                 value: pickupText,
+//                 trailing: isLoadingPickup
+//                     ? const SizedBox(
+//                         width: 16,
+//                         height: 16,
+//                         child: CircularProgressIndicator(strokeWidth: 2))
+//                     : IconButton(
+//                         onPressed: onPickupLocate,
+//                         icon: const Icon(Icons.my_location,
+//                             size: 18, color: Color(0xFF64748B)),
+//                         tooltip: 'Use current location',
+//                         visualDensity: VisualDensity.compact,
+//                         padding: EdgeInsets.zero,
+//                         constraints: const BoxConstraints(),
+//                       ),
+//               ),
+//             ),
 //             const Divider(height: 18),
-//             _LocationRow(
+//             InkWell(
+//               onTap: onDestinationTap,
+//               borderRadius: BorderRadius.circular(12),
+//               child: _LocationRow(
 //                 icon: Icons.location_on,
 //                 iconColor: const Color(0xFFEF4444),
 //                 label: 'Destination',
-//                 value: destinationText),
+//                 value: destinationText,
+//                 trailing: const Icon(Icons.search,
+//                     size: 18, color: Color(0xFF64748B)),
+//               ),
+//             ),
 //           ],
 //         ),
 //       ),
@@ -532,12 +673,14 @@
 //       {required this.icon,
 //       required this.iconColor,
 //       required this.label,
-//       required this.value});
+//       required this.value,
+//       this.trailing});
 
 //   final IconData icon;
 //   final Color iconColor;
 //   final String label;
 //   final String value;
+//   final Widget? trailing;
 
 //   @override
 //   Widget build(BuildContext context) {
@@ -557,6 +700,7 @@
 //             ],
 //           ),
 //         ),
+//         if (trailing != null) trailing!,
 //       ],
 //     );
 //   }
@@ -657,10 +801,10 @@
 //     final items = [
 //       (
 //         Icons.verified_user_outlined,
-//         'Verified Drivers',
+//         'Verified Riders',
 //         'Safe & secure users',
 //         const Color(0xFF4F46E5),
-//         'Every driver is KYC-verified and background-checked before approval.',
+//         'Every Rider is KYC-verified and background-checked before approval.',
 //       ),
 //       (
 //         Icons.savings_outlined,
@@ -1019,7 +1163,7 @@
 //               children: [
 //                 _MetaChip(
 //                     icon: Icons.person_outline,
-//                     label: 'Driver',
+//                     label: 'Rider',
 //                     value: ride.driverName),
 //                 _MetaChip(
 //                     icon: Icons.event_seat_outlined,
@@ -1046,7 +1190,7 @@
 //                           MaterialPageRoute(
 //                               builder: (_) => RideChatScreen(ride: ride))),
 //                       icon: const Icon(Icons.chat_bubble_outline),
-//                       label: const Text('Chat with Driver'),
+//                       label: const Text('Chat with Rider'),
 //                     )
 //                   : isDriver
 //                       ? OutlinedButton.icon(
@@ -1096,6 +1240,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/constants/app_constants.dart';
 
 //new code
 
@@ -1310,27 +1456,62 @@ class _DesktopSidebar extends StatelessWidget {
                   ),
                 ),
               ),
+          // const Spacer(),
+          // Container(
+          //   padding: const EdgeInsets.all(12),
+          //   decoration: BoxDecoration(
+          //     color: AppDesignTokens.surfaceMuted(context),
+          //     borderRadius: BorderRadius.circular(14),
+          //     border: Border.all(color: AppDesignTokens.borderColor(context)),
+          //   ),
+          //   child: Column(
+          //     crossAxisAlignment: CrossAxisAlignment.start,
+          //     children: [
+          //       Text('Need Help?',
+          //           style: TextStyle(
+          //               fontWeight: FontWeight.w700,
+          //               color: AppDesignTokens.textPrimary(context))),
+          //       const SizedBox(height: 4),
+          //       Text('Contact support 24/7 for booking and trip help.',
+          //           style: TextStyle(
+          //               fontSize: 12,
+          //               color: AppDesignTokens.textSecondary(context))),
+          //     ],
+          //   ),
+          // ),
           const Spacer(),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: AppDesignTokens.surfaceMuted(context),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppDesignTokens.borderColor(context)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Need Help?',
-                    style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppDesignTokens.textPrimary(context))),
-                const SizedBox(height: 4),
-                Text('Contact support 24/7 for booking and trip help.',
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: AppDesignTokens.textSecondary(context))),
-              ],
+          InkWell(
+            borderRadius: BorderRadius.circular(14),
+            onTap: () => launchUrl(
+                Uri(scheme: 'tel', path: AppConstants.tollFreeSupportNumber)),
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppDesignTokens.surfaceMuted(context),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppDesignTokens.borderColor(context)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Need Help?',
+                            style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                color: AppDesignTokens.textPrimary(context))),
+                        const SizedBox(height: 4),
+                        Text('Contact support 24/7 for booking and trip help.',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: AppDesignTokens.textSecondary(context))),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.call, size: 18, color: Color(0xFF4F46E5)),
+                ],
+              ),
             ),
           ),
         ],
@@ -1616,16 +1797,16 @@ class _GreetingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = MediaQuery.of(context).size.width < 720;
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         gradient: const LinearGradient(
             colors: [Color(0xFF5B61FF), Color(0xFF2E39E6)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight),
         boxShadow: const [
           BoxShadow(
-              color: Color(0x260F172A), blurRadius: 18, offset: Offset(0, 8))
+              color: Color(0x260F172A), blurRadius: 10, offset: Offset(0, 4))
         ],
       ),
       child: Row(
@@ -1637,19 +1818,19 @@ class _GreetingCard extends StatelessWidget {
                 Text('Hi, $firstName 👋',
                     style: TextStyle(
                         color: Colors.white,
-                        fontSize: isMobile ? 28 : 36,
+                        fontSize: isMobile ? 20 : 26,
                         fontWeight: FontWeight.w800)),
-                const SizedBox(height: 6),
+                const SizedBox(height: 3),
                 Text('Where are you going today?',
                     style: TextStyle(
                         color: Colors.white70,
-                        fontSize: isMobile ? 18 : 22,
+                        fontSize: isMobile ? 13 : 15,
                         fontWeight: FontWeight.w600)),
               ],
             ),
           ),
-          const Icon(Icons.directions_car_filled,
-              color: Colors.white70, size: 50),
+          Icon(Icons.directions_car_filled,
+              color: Colors.white70, size: isMobile ? 30 : 40),
         ],
       ),
     );
@@ -1858,10 +2039,10 @@ class _WhyNewCarpoolCard extends StatelessWidget {
     final items = [
       (
         Icons.verified_user_outlined,
-        'Verified Drivers',
+        'Verified Riders',
         'Safe & secure users',
         const Color(0xFF4F46E5),
-        'Every driver is KYC-verified and background-checked before approval.',
+        'Every Rider is KYC-verified and background-checked before approval.',
       ),
       (
         Icons.savings_outlined,
@@ -2220,7 +2401,7 @@ class _DashboardRideCard extends StatelessWidget {
               children: [
                 _MetaChip(
                     icon: Icons.person_outline,
-                    label: 'Driver',
+                    label: 'Rider',
                     value: ride.driverName),
                 _MetaChip(
                     icon: Icons.event_seat_outlined,
@@ -2247,7 +2428,7 @@ class _DashboardRideCard extends StatelessWidget {
                           MaterialPageRoute(
                               builder: (_) => RideChatScreen(ride: ride))),
                       icon: const Icon(Icons.chat_bubble_outline),
-                      label: const Text('Chat with Driver'),
+                      label: const Text('Chat with Rider'),
                     )
                   : isDriver
                       ? OutlinedButton.icon(

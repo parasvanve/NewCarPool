@@ -26,8 +26,8 @@ List<RideTimelineNode> buildRideTimeline({
   final nodes = <RideTimelineNode>[];
   final names = <String>[
     LocationDisplayFormatter.title(ride.origin),
-    ...ride.intermediateStops
-        .map((s) => LocationDisplayFormatter.title({'name': s.name, 'address': s.address})),
+    ...ride.intermediateStops.map((s) =>
+        LocationDisplayFormatter.title({'name': s.name, 'address': s.address})),
     LocationDisplayFormatter.title(ride.destination),
   ];
   for (var i = 0; i < names.length; i++) {
@@ -39,10 +39,11 @@ List<RideTimelineNode> buildRideTimeline({
     final hour = periodHour == 0 ? 12 : periodHour;
     final minute = eta.minute.toString().padLeft(2, '0');
     final meridian = eta.hour < 12 ? 'AM' : 'PM';
-    final timeLabel = i == 0 ? '$hour:$minute $meridian' : '~$hour:$minute $meridian';
+    final timeLabel =
+        i == 0 ? '$hour:$minute $meridian' : '~$hour:$minute $meridian';
 
     var label = isStart
-        ? 'Start (Driver Pickup)'
+        ? 'Start (Rider Pickup)'
         : isDestination
             ? 'Destination'
             : 'Stop $i';
@@ -105,7 +106,8 @@ class _TimelineRow extends StatelessWidget {
               Container(
                 width: 12,
                 height: 12,
-                decoration: BoxDecoration(color: node.color, shape: BoxShape.circle),
+                decoration:
+                    BoxDecoration(color: node.color, shape: BoxShape.circle),
               ),
               if (showConnector)
                 Container(
@@ -128,10 +130,12 @@ class _TimelineRow extends StatelessWidget {
                     Expanded(
                       child: Text(
                         node.label,
-                        style: TextStyle(fontWeight: FontWeight.w600, color: node.color),
+                        style: TextStyle(
+                            fontWeight: FontWeight.w600, color: node.color),
                       ),
                     ),
-                    Text(node.timeLabel, style: const TextStyle(color: Color(0xFF6B7280))),
+                    Text(node.timeLabel,
+                        style: const TextStyle(color: Color(0xFF6B7280))),
                   ],
                 ),
                 const SizedBox(height: 3),
@@ -157,8 +161,14 @@ class RideMiniProgressTimeline extends StatelessWidget {
         Row(
           children: [
             for (var i = 0; i < nodes.length; i++) ...[
-              Container(width: 10, height: 10, decoration: BoxDecoration(color: nodes[i].color, shape: BoxShape.circle)),
-              if (i < nodes.length - 1) const Expanded(child: Divider(thickness: 1.2, color: Color(0xFFC7CCD8))),
+              Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                      color: nodes[i].color, shape: BoxShape.circle)),
+              if (i < nodes.length - 1)
+                const Expanded(
+                    child: Divider(thickness: 1.2, color: Color(0xFFC7CCD8))),
             ],
           ],
         ),
@@ -171,7 +181,8 @@ class RideMiniProgressTimeline extends StatelessWidget {
                 child: Text(
                   node.label.split(' ').first,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
+                  style:
+                      const TextStyle(fontSize: 12, color: Color(0xFF6B7280)),
                 ),
               ),
           ],

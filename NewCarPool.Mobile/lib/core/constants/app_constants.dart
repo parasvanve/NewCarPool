@@ -11,4 +11,5 @@ class AppConstants {
   static const locationDbSaveIntervalSeconds = 60;
   static const locationFallbackPollingSeconds = 120;
   static const locationMinDistanceMeters = 30;
+  static const tollFreeSupportNumber = '1800XXXXXXX';
 }

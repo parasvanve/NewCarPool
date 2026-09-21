@@ -30,7 +30,7 @@ class AboutUsScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'NewCarPool connects drivers and riders heading the '
+                        'CarPool connects Riders and riders heading the '
                         'same way, making everyday commutes cheaper, greener '
                         'and more social.',
                       ),

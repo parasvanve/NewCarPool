@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/widgets/app_design_system.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../core/constants/app_constants.dart';
 
 class HelpSupportScreen extends StatelessWidget {
   const HelpSupportScreen({super.key});
@@ -42,6 +44,16 @@ class HelpSupportScreen extends StatelessWidget {
                   title: const Text('Contact Support'),
                   subtitle: const Text('support@carpool.com'),
                   trailing: const Icon(Icons.chevron_right),
+                ),
+              ),
+              Card(
+                child: ListTile(
+                  leading: const Icon(Icons.call_outlined),
+                  title: const Text('Call Us (Toll-Free)'),
+                  subtitle: const Text(AppConstants.tollFreeSupportNumber),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => launchUrl(Uri(
+                      scheme: 'tel', path: AppConstants.tollFreeSupportNumber)),
                 ),
               ),
               const SizedBox(height: 12),
