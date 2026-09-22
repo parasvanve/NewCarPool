@@ -1,10 +1,8 @@
 name: Deploy Flutter Web to Azure App Service
 
 on:
-  push:
-    branches: [ master ]
-    paths:
-      - 'NewCarPool.Mobile/**'   # only run when mobile app code changes
+  workflow_dispatch: 
+    
 
 jobs:
   build-and-deploy:
